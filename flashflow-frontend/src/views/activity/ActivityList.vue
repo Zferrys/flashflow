@@ -366,7 +366,7 @@ function addSkuDialog(row: PromotionActivity) {
 
 function editSku(row: PromotionActivity, sku: PromotionSku) {
   currentActivityForSku.value = row
-  editingSkuId.value = sku.skuId
+  editingSkuId.value = sku.id!
   skuForm.value = { ...sku }
   skuDialogVisible.value = true
 }

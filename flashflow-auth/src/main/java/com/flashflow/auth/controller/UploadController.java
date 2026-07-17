@@ -29,7 +29,7 @@ import java.util.UUID;
 @RequestMapping("/api/flashflow/auth/upload")
 public class UploadController {
 
-    @Value("${upload.dir:../flashflow-frontend/public/assets/products}")
+    @Value("${upload.dir:flashflow-frontend/public/assets/products}")
     private String uploadDir;
 
     @Value("${upload.url-prefix:/assets/products}")
