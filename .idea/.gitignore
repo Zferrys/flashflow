@@ -1,0 +1,6 @@
+# IntelliJ IDEA - 仅忽略个人工作区文件
+/shelf/
+/workspace.xml
+/httpRequests/
+/dataSources/
+/dataSources.local.xml
