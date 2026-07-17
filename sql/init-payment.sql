@@ -38,3 +38,23 @@ CREATE TABLE IF NOT EXISTS refund_record (
   KEY `idx_order_sn` (`order_sn`),
   KEY `idx_refund_status` (`refund_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='退款记录';
+
+-- 本地事务表（Saga 可靠性保证 — 支付事件发布）
+CREATE TABLE IF NOT EXISTS local_transaction (
+  `id`            bigint(20)  NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `message_id`    varchar(64) NOT NULL COMMENT '消息ID(全局唯一)',
+  `business_type` varchar(50) NOT NULL COMMENT '业务类型(payment.success/payment.fail/refund.success)',
+  `business_key`  varchar(100) NOT NULL COMMENT '业务主键(order_sn)',
+  `status`        tinyint(4)  NOT NULL DEFAULT '0' COMMENT '状态 0INIT 1DONE 2FAIL',
+  `payload`       json        DEFAULT NULL COMMENT '消息体(JSON)',
+  `retry_count`   int(11)     NOT NULL DEFAULT '0' COMMENT '重试次数',
+  `max_retry`     int(11)     NOT NULL DEFAULT '3' COMMENT '最大重试次数',
+  `last_retry`    datetime    DEFAULT NULL COMMENT '最后重试时间',
+  `remark`        varchar(500) DEFAULT NULL COMMENT '备注',
+  `create_time`   datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time`   datetime    DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_message_id` (`message_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_business` (`business_type`,`business_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='本地事务表(Saga — 支付事件)';

@@ -8,6 +8,8 @@ import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -21,9 +23,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -36,12 +40,16 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final String jwtSecret;
+    private final RedissonClient redissonClient; // Redis 不可用时为 null，黑名单降级
+    private static final String BLACKLIST_PREFIX = "flashflow:auth:jwt:blacklist:";
 
     /** 白名单——从 yml 注入，支持环境差异化 */
     private List<String> whiteList = List.of();
 
-    public AuthGlobalFilter(@org.springframework.beans.factory.annotation.Value("${jwt.secret}") String jwtSecret) {
+    public AuthGlobalFilter(@org.springframework.beans.factory.annotation.Value("${jwt.secret}") String jwtSecret,
+                            ObjectProvider<RedissonClient> redissonProvider) {
         this.jwtSecret = jwtSecret;
+        this.redissonClient = redissonProvider.getIfAvailable();
     }
 
     @PostConstruct
@@ -69,6 +77,25 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
             Claims claims = Jwts.parser().verifyWith(key).build()
                     .parseSignedClaims(token).getPayload();
+
+            // JWT 黑名单检查（登出后 Token 立即失效）
+            // Redis 不可用时（如 dev 环境未启动 Redis）降级跳过黑名单检查
+            String jti = claims.getId();
+            if (jti != null && !jti.isEmpty() && redissonClient != null) {
+                try {
+                    Boolean blacklisted = Mono.fromCallable(() ->
+                            redissonClient.getBucket(BLACKLIST_PREFIX + jti).isExists())
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .block(Duration.ofSeconds(2));
+                    if (Boolean.TRUE.equals(blacklisted)) {
+                        log.warn("Token 已被吊销: jti={}", jti);
+                        return unauthorized(exchange, "Token has been revoked");
+                    }
+                } catch (Exception redisEx) {
+                    log.warn("Redis 黑名单查询失败，降级放行: jti={}, error={}", jti, redisEx.getMessage());
+                }
+            }
+
             ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                     .header("X-User-Id", claims.getSubject())
                     .header("X-User-Name", claims.get("username", String.class))

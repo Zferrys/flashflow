@@ -146,6 +146,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/coupon/CouponAdmin.vue'),
         meta: { title: '优惠券管理', icon: 'Ticket' },
       },
+      {
+        path: 'refund',
+        name: 'RefundAdmin',
+        component: () => import('@/views/order/RefundAdmin.vue'),
+        meta: { title: '退款审批', icon: 'Money' },
+      },
     ],
   },
 ]

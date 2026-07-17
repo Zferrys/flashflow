@@ -54,14 +54,20 @@
           <!-- 金额信息 -->
           <el-descriptions :column="1" border style="margin-bottom:20px">
             <el-descriptions-item label="订单编号">{{ order.orderSn }}</el-descriptions-item>
-            <el-descriptions-item label="订单金额">
-              <span style="color:#f56c6c;font-size:20px;font-weight:bold">¥{{ order.totalAmount }}</span>
+            <el-descriptions-item label="商品总额">
+              <span>¥{{ order.totalAmount }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="order.discountAmount > 0" label="优惠金额">
+              <span style="color:#67c23a;font-weight:bold">-¥{{ order.discountAmount }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="应付金额">
+              <span style="color:#f56c6c;font-size:20px;font-weight:bold">¥{{ order.payAmount }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="支付方式">模拟支付（开发环境）</el-descriptions-item>
           </el-descriptions>
 
           <el-button type="danger" size="large" style="width:100%;height:48px;font-size:16px" @click="handlePay" :loading="paying">
-            确认支付 ¥{{ order.totalAmount }}
+            确认支付 ¥{{ order.payAmount }}
           </el-button>
           <div style="margin-top:12px;text-align:center">
             <el-button text @click="router.push('/order')">稍后支付</el-button>

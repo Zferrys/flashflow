@@ -1,5 +1,7 @@
 package com.flashflow.auth.security;
 
+import com.flashflow.auth.dao.UserInfoMapper;
+import com.flashflow.auth.entity.UserInfo;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -7,6 +9,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -15,9 +18,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
 
 /**
- * JWT 认证过滤器：从请求头提取 Token，解析用户信息并设置到 SecurityContext
+ * JWT 认证过滤器：兼容管理员（sys_user）和 C端用户（user_info）
  */
 @Slf4j
 @Component
@@ -26,6 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService customUserDetailsService;
+    private final UserInfoMapper userInfoMapper;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -36,7 +41,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
             try {
                 Long userId = jwtTokenProvider.getUserIdFromToken(token);
-                UserDetails userDetails = customUserDetailsService.loadUserById(userId);
+                String role = jwtTokenProvider.getClaimFromToken(token, "role");
+                String username = jwtTokenProvider.getUsernameFromToken(token);
+
+                UserDetails userDetails;
+                if ("ROLE_ADMIN".equals(role)) {
+                    // 管理员：从 sys_user 加载
+                    userDetails = customUserDetailsService.loadUserById(userId);
+                } else {
+                    // C端用户：从 user_info 加载
+                    UserInfo user = userInfoMapper.selectById(userId);
+                    if (user == null || user.getStatus() != 1) {
+                        throw new RuntimeException("用户不存在或已禁用");
+                    }
+                    userDetails = new LoginUser(
+                            user.getId(),
+                            user.getEmail() != null ? user.getEmail() : "",
+                            user.getPassword(),
+                            role != null ? role : "ROLE_USER",
+                            Collections.singleton(new SimpleGrantedAuthority("ROLE_USER")),
+                            user.getStatus() == 1
+                    );
+                }
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
@@ -44,7 +70,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (Exception e) {
-                log.warn("Failed to authenticate user by JWT: {}", e.getMessage());
+                log.warn("JWT 认证失败: {}", e.getMessage());
                 SecurityContextHolder.clearContext();
             }
         }

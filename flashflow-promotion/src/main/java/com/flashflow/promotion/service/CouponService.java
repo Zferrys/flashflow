@@ -17,6 +17,9 @@ public interface CouponService {
     /** 核销：下单成功后标记优惠券已使用（乐观锁防并发） */
     boolean markAsUsed(Long userCouponId, String orderSn);
 
+    /** 释放优惠券（根据订单号，退款/取消时调用） */
+    boolean releaseByOrderSn(String orderSn);
+
     // ========== 管理后台 ==========
 
     List<Coupon> adminList();

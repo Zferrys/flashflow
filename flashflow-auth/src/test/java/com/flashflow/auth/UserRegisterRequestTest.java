@@ -29,10 +29,11 @@ class UserRegisterRequestTest {
     }
 
     @Test
-    @DisplayName("合法手机号+密码应该通过")
+    @DisplayName("合法邮箱+密码+验证码应该通过")
     void validRequestShouldPass() {
         UserRegisterRequest req = new UserRegisterRequest();
-        req.setPhone("13800138000");
+        req.setEmail("test@example.com");
+        req.setVerifyCode("123456");
         req.setPassword("TestPwd@2024");
         req.setNickname("测试用户");
         Set<ConstraintViolation<UserRegisterRequest>> violations = validator.validate(req);
@@ -40,10 +41,11 @@ class UserRegisterRequestTest {
     }
 
     @Test
-    @DisplayName("非法手机号格式应该失败")
-    void invalidPhoneShouldFail() {
+    @DisplayName("非法邮箱格式应该失败")
+    void invalidEmailShouldFail() {
         UserRegisterRequest req = new UserRegisterRequest();
-        req.setPhone("12345");
+        req.setEmail("not-an-email");
+        req.setVerifyCode("123456");
         req.setPassword("TestPwd@2024");
         Set<ConstraintViolation<UserRegisterRequest>> violations = validator.validate(req);
         assertFalse(violations.isEmpty());
@@ -53,19 +55,33 @@ class UserRegisterRequestTest {
     @DisplayName("弱密码应该失败")
     void weakPasswordShouldFail() {
         UserRegisterRequest req = new UserRegisterRequest();
-        req.setPhone("13800138000");
+        req.setEmail("test@example.com");
+        req.setVerifyCode("123456");
         req.setPassword("123456"); // 太短，无特殊字符
         Set<ConstraintViolation<UserRegisterRequest>> violations = validator.validate(req);
         assertFalse(violations.isEmpty());
     }
 
     @Test
-    @DisplayName("空手机号应该失败")
-    void blankPhoneShouldFail() {
+    @DisplayName("空邮箱应该失败")
+    void blankEmailShouldFail() {
         UserRegisterRequest req = new UserRegisterRequest();
-        req.setPhone("");
+        req.setEmail("");
+        req.setVerifyCode("123456");
         req.setPassword("TestPwd@2024");
         Set<ConstraintViolation<UserRegisterRequest>> violations = validator.validate(req);
         assertFalse(violations.isEmpty());
+    }
+
+    @Test
+    @DisplayName("手机号选填可以不填")
+    void phoneOptionalShouldPass() {
+        UserRegisterRequest req = new UserRegisterRequest();
+        req.setEmail("test@example.com");
+        req.setVerifyCode("123456");
+        req.setPassword("TestPwd@2024");
+        // 不设置 phone
+        Set<ConstraintViolation<UserRegisterRequest>> violations = validator.validate(req);
+        assertTrue(violations.isEmpty());
     }
 }

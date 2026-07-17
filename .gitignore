@@ -5,8 +5,12 @@
 target/
 !.mvn/wrapper/maven-wrapper.jar
 
-# IDE
-.idea/
+# IDE (IntelliJ IDEA)
+.idea/workspace.xml
+.idea/shelf/
+.idea/httpRequests/
+.idea/dataSources/
+.idea/dataSources.local.xml
 *.iml
 *.ipr
 *.iws

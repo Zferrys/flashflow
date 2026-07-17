@@ -35,7 +35,7 @@ class AuthApplicationTest {
     @DisplayName("管理员登录应该返回 Token")
     void adminLoginShouldReturnToken() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
-                "username", "admin",
+                "account", "admin",
                 "password", "Admin@123"
         ));
 
@@ -57,7 +57,7 @@ class AuthApplicationTest {
     @DisplayName("错误密码应该返回 LOGIN_FAILED")
     void wrongPasswordShouldFail() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
-                "username", "admin",
+                "account", "admin",
                 "password", "wrong-password"
         ));
 
@@ -73,7 +73,7 @@ class AuthApplicationTest {
     @DisplayName("空参数应该返回 PARAM_ERROR")
     void blankParamsShouldFail() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
-                "username", "",
+                "account", "",
                 "password", ""
         ));
 
@@ -89,7 +89,7 @@ class AuthApplicationTest {
     @DisplayName("不存在的用户应该返回 LOGIN_FAILED")
     void unknownUserShouldFail() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
-                "username", "nonexist",
+                "account", "nonexist",
                 "password", "Admin@123"
         ));
 

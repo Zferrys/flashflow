@@ -1,6 +1,9 @@
 package com.flashflow.inventory.controller;
 
 import com.flashflow.common.domain.R;
+import com.flashflow.common.context.UserContext;
+import com.flashflow.common.domain.ErrorCode;
+import com.flashflow.common.exception.BusinessException;
 import com.flashflow.inventory.entity.Inventory;
 import com.flashflow.inventory.entity.InventoryShard;
 import com.flashflow.inventory.service.InventoryService;
@@ -21,6 +24,12 @@ import java.util.List;
 public class InventoryController {
 
     private final InventoryService inventoryService;
+
+    private void requireAdmin() {
+        if (!UserContext.isAdmin()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+    }
 
     @Operation(summary = "查询库存")
     @GetMapping("/{skuId}")
@@ -49,13 +58,15 @@ public class InventoryController {
     @Operation(summary = "库存调整（管理员）")
     @PutMapping("/adjust")
     public R<Void> adjust(@RequestBody AdjustRequest request) {
+        requireAdmin();
         inventoryService.adjust(request.skuId(), request.totalStock());
         return R.ok();
     }
 
-    @Operation(summary = "Redis 预热")
+    @Operation(summary = "Redis 预热（管理员）")
     @PostMapping("/warm-up/{skuId}")
     public R<Void> warmUp(@PathVariable Long skuId) {
+        requireAdmin();
         inventoryService.warmUp(skuId);
         return R.ok();
     }

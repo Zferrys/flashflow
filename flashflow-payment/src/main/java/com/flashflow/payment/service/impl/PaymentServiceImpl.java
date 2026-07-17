@@ -207,13 +207,15 @@ public class PaymentServiceImpl implements PaymentService {
         if (alipayClient != null) {
             try {
                 AlipayTradeRefundRequest request = new AlipayTradeRefundRequest();
-                request.setBizContent("{\"out_trade_no\":\"" + orderSn
-                        + "\",\"refund_amount\":\"" + amount + "\"}");
+                Map<String, Object> bizContent = new HashMap<>();
+                bizContent.put("out_trade_no", orderSn);
+                bizContent.put("refund_amount", amount.toString());
+                request.setBizContent(objectMapper.writeValueAsString(bizContent));
                 AlipayTradeRefundResponse response = alipayClient.execute(request);
                 if (!response.isSuccess()) {
                     throw new BusinessException(ErrorCode.REFUND_FAILED, response.getMsg());
                 }
-            } catch (AlipayApiException e) {
+            } catch (AlipayApiException | com.fasterxml.jackson.core.JsonProcessingException e) {
                 throw new BusinessException(ErrorCode.REFUND_FAILED, e.getMessage());
             }
         }

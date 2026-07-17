@@ -8,8 +8,8 @@
           <el-button :type="statusFilter === 0 ? 'primary' : 'default'" size="small" @click="statusFilter=0;fetchOrders()">待支付</el-button>
           <el-button :type="statusFilter === 1 ? 'primary' : 'default'" size="small" @click="statusFilter=1;fetchOrders()">已支付</el-button>
           <el-button :type="statusFilter === 2 ? 'primary' : 'default'" size="small" @click="statusFilter=2;fetchOrders()">已发货</el-button>
-          <el-button :type="statusFilter === 3 ? 'primary' : 'default'" size="small" @click="statusFilter=3;fetchOrders()">已完成</el-button>
-          <el-button :type="statusFilter === 4 ? 'primary' : 'default'" size="small" @click="statusFilter=4;fetchOrders()">已取消</el-button>
+          <el-button :type="statusFilter === 6 ? 'primary' : 'default'" size="small" @click="statusFilter=6;fetchOrders()">退款中</el-button>
+          <el-button :type="statusFilter === 7 ? 'primary' : 'default'" size="small" @click="statusFilter=7;fetchOrders()">已退款</el-button>
         </div>
       </el-card>
 
@@ -39,6 +39,7 @@
               <el-button size="small" @click="handleCancel(order)" v-if="order.status === 0">取消订单</el-button>
               <el-button size="small" type="success" @click="handleDeliver(order.id!)" v-if="order.status === 2">确认收货</el-button>
               <el-button size="small" type="danger" plain @click="router.push(`/refund/${order.orderSn}`)" v-if="order.status === 1 || order.status === 2">申请退款</el-button>
+              <el-button size="small" type="warning" plain @click="router.push(`/refund/${order.orderSn}`)" v-if="order.status === 6">查看退款进度</el-button>
               <el-button size="small" text @click="showDetail(order)">详情</el-button>
             </div>
           </div>
@@ -115,7 +116,7 @@ function statusLabel(s: number) {
 async function fetchOrders() {
   loading.value = true
   try {
-    if (!userStore.userId) return
+    if (!userStore.token) return
     const params: any = { page: page.value, size: size.value }
     if (statusFilter.value !== null) params.status = statusFilter.value
     const res = await getOrderPage(params)
@@ -159,7 +160,7 @@ async function showDetail(order: any) {
 }
 
 onMounted(() => {
-  if (!localStorage.getItem('flashflow_userId') && !userStore.userId) {
+  if (!userStore.token) {
     router.push('/login')
     return
   }

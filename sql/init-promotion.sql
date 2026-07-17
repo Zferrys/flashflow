@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS promotion_activity (
   KEY `idx_status` (`status`),
   KEY `idx_start_time` (`start_time`),
   KEY `idx_end_time` (`end_time`)
+  KEY `idx_status_time` (`status`, `start_time`, `end_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='营销活动';
 
 -- 活动商品
@@ -51,5 +52,6 @@ CREATE TABLE IF NOT EXISTS promotion_record (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_activity` (`user_id`,`activity_id`,`sku_id`),
   KEY `idx_activity_id` (`activity_id`),
-  KEY `idx_order_id` (`order_id`)
+  KEY `idx_order_id` (`order_id`),
+  KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动参与记录(防重复)';

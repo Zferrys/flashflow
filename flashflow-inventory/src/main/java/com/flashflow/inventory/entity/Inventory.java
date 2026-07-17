@@ -21,6 +21,7 @@ public class Inventory {
 
     private Integer shardCount;
 
+    @Version
     private Integer version;
 
     @TableField(fill = FieldFill.INSERT)

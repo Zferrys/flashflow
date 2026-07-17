@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS sys_oper_log (
 -- C 端用户
 CREATE TABLE IF NOT EXISTS user_info (
   `id`          bigint(20)  NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `phone`       varchar(20) NOT NULL COMMENT '手机号(登录账号)',
+  `email`       varchar(100) NOT NULL COMMENT '邮箱(登录账号)',
+  `phone`       varchar(20)  DEFAULT NULL COMMENT '手机号(选填)',
   `password`    varchar(200) NOT NULL COMMENT '密码(BCrypt)',
   `nickname`    varchar(50)  DEFAULT NULL COMMENT '昵称',
   `avatar`      varchar(500) DEFAULT NULL COMMENT '头像URL',
@@ -104,10 +105,16 @@ CREATE TABLE IF NOT EXISTS user_info (
   `create_time` datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime     DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_email` (`email`),
   UNIQUE KEY `uk_phone` (`phone`),
   KEY `idx_status` (`status`),
   KEY `idx_inviter` (`inviter_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='C端用户';
+
+-- 存量数据迁移：为新表结构兼容，若旧表已存在则动态加列（幂等）
+-- ALTER TABLE user_info ADD COLUMN email VARCHAR(100) AFTER id;
+-- ALTER TABLE user_info ADD UNIQUE KEY uk_email (email);
+-- ALTER TABLE user_info MODIFY COLUMN phone VARCHAR(20) DEFAULT NULL;
 
 -- C端用户收货地址
 CREATE TABLE IF NOT EXISTS user_address (
@@ -131,7 +138,7 @@ CREATE TABLE IF NOT EXISTS user_address (
 CREATE TABLE IF NOT EXISTS email_verify (
   `id`          bigint(20)   NOT NULL AUTO_INCREMENT COMMENT '主键',
   `email`       varchar(100) NOT NULL COMMENT '邮箱',
-  `code`        varchar(10)  NOT NULL COMMENT '验证码',
+  `code`        varchar(200) NOT NULL COMMENT '验证码(BCrypt哈希)',
   `type`        tinyint(4)   NOT NULL DEFAULT '1' COMMENT '类型 1注册 2找回密码',
   `status`      tinyint(4)   NOT NULL DEFAULT '0' COMMENT '状态 0未使用 1已使用',
   `expire_time` datetime     NOT NULL COMMENT '过期时间',

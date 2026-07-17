@@ -42,6 +42,7 @@ public class JwtTokenProvider {
     public String generateAccessToken(Long userId, String username, String roleCode) {
         Date now = new Date();
         return Jwts.builder()
+                .id(java.util.UUID.randomUUID().toString())
                 .subject(String.valueOf(userId))
                 .claim("username", username)
                 .claim("role", roleCode)
@@ -79,6 +80,13 @@ public class JwtTokenProvider {
     public String getUsernameFromToken(String token) {
         Claims claims = parseToken(token);
         return claims.get("username", String.class);
+    }
+
+    /**
+     * 从 Token 中获取 JWT ID（用于黑名单验证）
+     */
+    public String getJtiFromToken(String token) {
+        return parseToken(token).getId();
     }
 
     /**

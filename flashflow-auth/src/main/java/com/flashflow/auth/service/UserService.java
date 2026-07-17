@@ -18,4 +18,10 @@ public interface UserService {
 
     /** 获取 C 端用户总数 */
     long count();
+
+    /** 根据 ID 获取用户信息 */
+    UserInfo getById(Long id);
+
+    /** 修改个人信息（昵称/手机号） */
+    void updateProfile(Long userId, String nickname, String phone);
 }

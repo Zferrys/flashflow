@@ -3,6 +3,9 @@ package com.flashflow.promotion.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.flashflow.common.domain.R;
+import com.flashflow.common.context.UserContext;
+import com.flashflow.common.domain.ErrorCode;
+import com.flashflow.common.exception.BusinessException;
 import com.flashflow.promotion.entity.PromotionActivity;
 import com.flashflow.promotion.entity.PromotionSku;
 import com.flashflow.promotion.service.PromotionService;
@@ -24,6 +27,13 @@ public class PromotionController {
 
     private final PromotionService promotionService;
 
+    /** 管理员权限校验（统一入口，避免直接调用管理接口） */
+    private void requireAdmin() {
+        if (!UserContext.isAdmin()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+    }
+
     // ========== 活动管理 ==========
 
     @Operation(summary = "活动分页")
@@ -37,6 +47,7 @@ public class PromotionController {
     @Operation(summary = "创建活动")
     @PostMapping("/activity")
     public R<Void> create(@RequestBody PromotionActivity activity) {
+        requireAdmin();
         promotionService.createActivity(activity);
         return R.ok();
     }
@@ -50,6 +61,7 @@ public class PromotionController {
     @Operation(summary = "修改活动")
     @PutMapping("/activity")
     public R<Void> update(@RequestBody PromotionActivity activity) {
+        requireAdmin();
         promotionService.updateActivity(activity);
         return R.ok();
     }
@@ -57,6 +69,7 @@ public class PromotionController {
     @Operation(summary = "发布活动（触发 Redis 预热）")
     @PostMapping("/activity/{id}/publish")
     public R<Void> publish(@PathVariable Long id) {
+        requireAdmin();
         promotionService.publish(id);
         return R.ok();
     }
@@ -64,6 +77,7 @@ public class PromotionController {
     @Operation(summary = "关闭活动")
     @PostMapping("/activity/{id}/close")
     public R<Void> close(@PathVariable Long id) {
+        requireAdmin();
         promotionService.close(id);
         return R.ok();
     }
@@ -71,6 +85,7 @@ public class PromotionController {
     @Operation(summary = "删除活动（仅草稿）")
     @DeleteMapping("/activity/{id}")
     public R<Void> deleteActivity(@PathVariable Long id) {
+        requireAdmin();
         promotionService.deleteActivity(id);
         return R.ok();
     }
@@ -80,6 +95,7 @@ public class PromotionController {
     @Operation(summary = "添加活动商品")
     @PostMapping("/activity/{id}/sku")
     public R<Void> addSku(@PathVariable Long id, @RequestBody PromotionSku sku) {
+        requireAdmin();
         sku.setActivityId(id);
         promotionService.addSku(sku);
         return R.ok();
@@ -88,6 +104,7 @@ public class PromotionController {
     @Operation(summary = "修改活动商品")
     @PutMapping("/activity/{id}/sku")
     public R<Void> updateSku(@PathVariable Long id, @RequestBody PromotionSku sku) {
+        requireAdmin();
         sku.setActivityId(id);
         promotionService.updateSku(sku);
         return R.ok();
@@ -96,6 +113,7 @@ public class PromotionController {
     @Operation(summary = "删除活动商品")
     @DeleteMapping("/activity/{id}/sku/{skuId}")
     public R<Void> deleteSku(@PathVariable Long id, @PathVariable Long skuId) {
+        requireAdmin();
         promotionService.deleteSku(id, skuId);
         return R.ok();
     }

@@ -24,6 +24,7 @@
         <el-menu-item index="/admin/order"><el-icon><List /></el-icon><span>订单管理</span></el-menu-item>
         <el-menu-item index="/admin/product"><el-icon><Goods /></el-icon><span>商品管理</span></el-menu-item>
         <el-menu-item index="/admin/coupon"><el-icon><Ticket /></el-icon><span>优惠券管理</span></el-menu-item>
+        <el-menu-item index="/admin/refund"><el-icon><Money /></el-icon><span>退款审批</span></el-menu-item>
         <div class="sidebar-divider"></div>
         <el-menu-item index="/">
           <el-icon><ShoppingCart /></el-icon><span>返回商城</span>
@@ -145,7 +146,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Fold, Expand } from '@element-plus/icons-vue'
+import { Fold, Expand, Money } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()

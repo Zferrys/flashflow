@@ -43,7 +43,7 @@ public class OrderEventConsumer {
     }
 
     @RabbitHandler
-    @RabbitListener(queues = "queue.inventory.deduct", ackMode = "MANUAL")
+    @RabbitListener(queues = "queue.inventory.deduct", ackMode = "MANUAL", concurrency = "5-10")
     public void handleOrderCreated(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         String messageId = rawMessage.getMessageProperties().getMessageId();
         long deliveryTag = rawMessage.getMessageProperties().getDeliveryTag();
@@ -75,28 +75,36 @@ public class OrderEventConsumer {
         }
     }
 
+    /**
+     * 释放库存（Saga 补偿：取消订单 + 退款 共用此处理器）
+     * 监听队列 queue.inventory.release，绑定路由键 order.cancelled / order.refunded
+     */
     @RabbitHandler
-    @RabbitListener(queues = "queue.inventory.release", ackMode = "MANUAL")
+    @RabbitListener(queues = "queue.inventory.release", ackMode = "MANUAL", concurrency = "3-5")
     public void handleOrderCancelled(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         String messageId = rawMessage.getMessageProperties().getMessageId();
         long deliveryTag = rawMessage.getMessageProperties().getDeliveryTag();
         if (mqHelper.isDuplicate(messageId)) { channel.basicAck(deliveryTag, false); return; }
         try {
             String orderSn = (String) message.get("orderSn");
+            String reason = message.containsKey("refundReason")
+                    ? (String) message.get("refundReason")
+                    : (String) message.getOrDefault("cancelReason", "");
+            boolean isRefund = message.containsKey("refundReason");
             List<Map<String, Object>> items = objectMapper.convertValue(
                     message.get("items"), new TypeReference<List<Map<String, Object>>>() {});
-            log.info("Saga: 释放库存开始, orderSn={}", orderSn);
+            log.info("Saga: {}释放库存开始, orderSn={}", isRefund ? "退款" : "取消", orderSn);
             for (Map<String, Object> item : items) {
                 Long skuId = Long.valueOf(item.get("skuId").toString());
                 Integer quantity = (Integer) item.get("quantity");
                 if (!inventoryService.release(skuId, quantity, orderSn)) {
-                    // 释放失败不 requeue — Redis key 可能从未存在或被清理，无限重试无意义
-                    log.error("Saga: 释放库存失败(跳过), orderSn={}, skuId={}", orderSn, skuId);
+                    log.error("Saga: 释放库存失败(跳过), orderSn={}, skuId={}, type={}",
+                            orderSn, skuId, isRefund ? "refund" : "cancel");
                 }
             }
             mqHelper.markProcessed(messageId);
             channel.basicAck(deliveryTag, false);
-            log.info("Saga: 释放库存完成, orderSn={}", orderSn);
+            log.info("Saga: {}释放库存完成, orderSn={}", isRefund ? "退款" : "取消", orderSn);
         } catch (Exception e) {
             log.error("Saga: 释放库存异常, messageId={}", messageId, e);
             mqHelper.retryOrDead(rawMessage, channel, deliveryTag);
@@ -104,7 +112,7 @@ public class OrderEventConsumer {
     }
 
     @RabbitHandler
-    @RabbitListener(queues = "queue.inventory.confirm", ackMode = "MANUAL")
+    @RabbitListener(queues = "queue.inventory.confirm", ackMode = "MANUAL", concurrency = "3-5")
     public void handleOrderPaid(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         String messageId = rawMessage.getMessageProperties().getMessageId();
         long deliveryTag = rawMessage.getMessageProperties().getDeliveryTag();
@@ -118,5 +126,16 @@ public class OrderEventConsumer {
             log.error("Saga: 确认扣减异常", e);
             mqHelper.retryOrDead(rawMessage, channel, deliveryTag);
         }
+    }
+
+    /**
+     * 退款时释放库存（复用 order.cancelled 的 release 逻辑）
+     * 监听队列 queue.inventory.release，路由键 order.refunded
+     */
+    @RabbitHandler
+    @RabbitListener(queues = "queue.inventory.release", ackMode = "MANUAL", concurrency = "3-5")
+    public void handleOrderRefunded(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
+        // 委托给统一释放处理器
+        handleOrderCancelled(message, channel, rawMessage);
     }
 }

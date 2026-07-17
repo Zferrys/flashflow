@@ -31,7 +31,8 @@ public enum ErrorCode {
     PASSWORD_EXPIRED        (110008,  "密码已过期，请修改密码"),
     USER_NOT_FOUND          (110009,  "用户不存在"),
     PHONE_EXISTED           (110010,  "手机号已被注册"),
-    CAPTCHA_ERROR           (110011,  "验证码错误或已过期"),
+    EMAIL_EXISTED           (110011,  "邮箱已被注册"),
+    CAPTCHA_ERROR           (110012,  "验证码错误或已过期"),
 
     // ========== 订单 (12xxxx) ==========
     ORDER_NOT_FOUND         (120001,  "订单不存在"),

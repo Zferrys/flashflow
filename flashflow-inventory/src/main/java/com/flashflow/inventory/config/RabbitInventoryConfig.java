@@ -19,6 +19,7 @@ public class RabbitInventoryConfig {
     public static final String RK_ORDER_CREATED    = "order.created";
     public static final String RK_ORDER_CANCELLED  = "order.cancelled";
     public static final String RK_ORDER_PAID       = "order.paid";
+    public static final String RK_ORDER_REFUNDED   = "order.refunded";
 
     /** 声明 TopicExchange（确保发布者声明前已存在） */
     @Bean
@@ -48,9 +49,15 @@ public class RabbitInventoryConfig {
     }
 
     @Bean
-    public Binding releaseBinding() {
+    public Binding releaseBindingCancel() {
         return BindingBuilder.bind(releaseQueue())
                 .to(inventoryOrderExchange()).with(RK_ORDER_CANCELLED);
+    }
+
+    @Bean
+    public Binding releaseBindingRefund() {
+        return BindingBuilder.bind(releaseQueue())
+                .to(inventoryOrderExchange()).with(RK_ORDER_REFUNDED);
     }
 
     @Bean

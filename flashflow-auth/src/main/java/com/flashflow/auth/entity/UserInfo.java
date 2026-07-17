@@ -15,7 +15,10 @@ public class UserInfo {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 手机号（登录账号） */
+    /** 邮箱（登录账号） */
+    private String email;
+
+    /** 手机号（选填） */
     private String phone;
 
     /** 密码（BCrypt） */

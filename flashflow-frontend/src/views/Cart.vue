@@ -55,6 +55,16 @@
                 <span style="color:var(--ff-text-secondary)">商品 ({{ checkedTotal }} 件)</span>
                 <span style="font-weight:600">¥{{ totalAmount.toFixed(2) }}</span>
               </div>
+              <!-- 优惠券选择 -->
+              <div style="margin-bottom:8px;font-size:14px">
+                <el-select v-model="selectedCouponId" placeholder="选择优惠券" clearable size="small" style="width:100%" @change="onCouponChange">
+                  <el-option v-for="c in myCoupons" :key="c.id" :label="`${c.couponName} 省¥${c.discountAmount || ''}`" :value="c.id" />
+                </el-select>
+              </div>
+              <div v-if="discountAmount > 0" style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px">
+                <span style="color:var(--ff-success)">优惠</span>
+                <span style="color:var(--ff-success);font-weight:600">-¥{{ discountAmount.toFixed(2) }}</span>
+              </div>
               <div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:14px">
                 <span style="color:var(--ff-text-secondary)">运费</span>
                 <span style="color:var(--ff-success);font-weight:500">免运费</span>
@@ -62,7 +72,7 @@
               <el-divider />
               <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px">
                 <span style="font-size:14px;color:var(--ff-text-secondary)">应付</span>
-                <span style="font-size:28px;font-weight:800;color:var(--ff-danger)">¥{{ totalAmount.toFixed(2) }}</span>
+                <span style="font-size:28px;font-weight:800;color:var(--ff-danger)">¥{{ payAmount.toFixed(2) }}</span>
               </div>
               <el-button type="danger" size="large" class="checkout-btn" :disabled="checkedTotal === 0" :loading="checking" @click="checkout">
                 结算 ({{ checkedTotal }})
@@ -93,6 +103,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getCart, updateCartQuantity, removeFromCart, clearCheckedCart, toggleChecked, getAddresses, type CartItem } from '@/api/cart'
+import { getMyCoupons, calculateDiscount } from '@/api/coupon'
 import request from '@/api/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete } from '@element-plus/icons-vue'
@@ -104,24 +115,41 @@ const checking = ref(false)
 const list = ref<(CartItem & { _checked: boolean })[]>([])
 const allChecked = ref(false)
 
+// 优惠券
+const myCoupons = ref<any[]>([])
+const selectedCouponId = ref<number | null>(null)
+const discountAmount = ref(0)
+
 const checkedTotal = computed(() => list.value.filter(i => i._checked).length)
 const totalAmount = computed(() => list.value.filter(i => i._checked).reduce((s, i) => s + i.price * i.quantity, 0))
+const payAmount = computed(() => Math.max(0, totalAmount.value - discountAmount.value))
 
 // 全选/取消全选
-function toggleAll() {
-  const newVal = !allChecked.value
-  allChecked.value = newVal
-  list.value.forEach(i => { i._checked = newVal; toggle(i) })
+function toggleAll(val: boolean) {
+  allChecked.value = val
+  list.value.forEach(i => { i._checked = val; toggle(i) })
 }
 
 async function fetchCart() {
-  const uid = userStore.userId
-  if (!uid) return
+  if (!userStore.token) return
   loading.value = true
   try {
     const res = await getCart()
     list.value = (res.data || []).map((i: CartItem) => ({ ...i, _checked: i.checked === 1 }))
+    // 同时加载可用优惠券
+    try {
+      const couponRes = await getMyCoupons()
+      myCoupons.value = (couponRes.data || []).filter((c: any) => c.used === 0)
+    } catch { /* coupon load failure is non-critical */ }
   } finally { loading.value = false }
+}
+
+async function onCouponChange(val: number | '') {
+  if (!val) { discountAmount.value = 0; return }
+  try {
+    const res = await calculateDiscount(val as number, totalAmount.value)
+    discountAmount.value = res.data || 0
+  } catch { discountAmount.value = 0 }
 }
 
 async function toggle(item: CartItem & { _checked: boolean }) {
@@ -142,16 +170,14 @@ async function remove(id: number) {
 }
 
 async function clearChecked() {
-  const uid = userStore.userId || 0
-  if (!uid) return
+  if (!userStore.token) return
   await clearCheckedCart()
   list.value = list.value.filter(i => !i._checked)
 }
 
 async function checkout() {
   checking.value = true
-  const uid = userStore.userId || 0
-  if (!uid) { router.push('/login'); checking.value = false; return }
+  if (!userStore.token) { router.push('/login'); checking.value = false; return }
   const checked = list.value.filter(i => i._checked)
   if (!checked.length) { checking.value = false; return }
 
@@ -166,10 +192,10 @@ async function checkout() {
     }
   } catch {}
 
-  const total = checked.reduce((s, i) => s + i.price * i.quantity, 0)
+  const total = payAmount.value
   try {
     await ElMessageBox.confirm(
-      `共 ${checked.length} 件商品，合计 ¥${total}\n收货：${addressSnapshot || '未设置'}\n确认下单？`,
+      `共 ${checked.length} 件商品，合计 ¥${total}${discountAmount.value > 0 ? ` (已优惠¥${discountAmount.value.toFixed(2)})` : ''}\n收货：${addressSnapshot || '未设置'}\n确认下单？`,
       '订单确认', { confirmButtonText: '确认下单', cancelButtonText: '取消', type: 'info' }
     )
   } catch { checking.value = false; return }
@@ -177,6 +203,7 @@ async function checkout() {
   try {
     const res = await request.post('/order', {
       addressSnapshot,
+      userCouponId: selectedCouponId.value || undefined,
       items: checked.map(i => ({ skuId: i.skuId, skuName: i.skuName, quantity: i.quantity, price: i.price, skuImage: i.skuImage }))
     })
     await clearCheckedCart()

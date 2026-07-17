@@ -107,7 +107,7 @@ function onRegionChange(val: string[]) {
 
 async function fetchList() {
   const uid = String(userStore.userId || 0)
-  if (!uid) return
+  if (!userStore.token) return
   loading.value = true
   try {
     const res = await getAddresses()
@@ -137,7 +137,7 @@ async function save() {
   saving.value = true
   try {
     const uid = String(userStore.userId || 0)
-    if (!uid) return
+    if (!userStore.token) return
     form.value.userId = Number(uid)
     if (editing.value) {
       await updateAddress(form.value)
@@ -161,7 +161,7 @@ async function remove(id: number) {
 
 async function setDefault(id: number) {
   const uid = String(userStore.userId || 0)
-  if (!uid) return
+  if (!userStore.token) return
   await setDefaultAddress(id)
   ElMessage.success('已设为默认')
   fetchList()

@@ -128,7 +128,7 @@ function scopeLabel(c: any) {
 
 // ===== 操作 =====
 async function doClaim(couponId: number) {
-  if (!userStore.userId) { router.push('/login'); return }
+  if (!userStore.token) { router.push('/login'); return }
   try {
     await claimCoupon(couponId)
     ElMessage.success('领取成功')
@@ -138,7 +138,7 @@ async function doClaim(couponId: number) {
 }
 
 async function fetchAvailable() {
-  if (!userStore.userId) return
+  if (!userStore.token) return
   loading.value = true
   try {
     const res = await getAvailableCoupons()
@@ -147,7 +147,7 @@ async function fetchAvailable() {
 }
 
 async function fetchMy() {
-  if (!userStore.userId) return
+  if (!userStore.token) return
   myLoading.value = true
   try {
     const res = await getMyCoupons()

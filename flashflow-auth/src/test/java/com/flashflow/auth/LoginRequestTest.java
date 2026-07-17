@@ -32,28 +32,28 @@ class LoginRequestTest {
     @DisplayName("合法参数应该通过校验")
     void validRequestShouldPass() {
         LoginRequest req = new LoginRequest();
-        req.setUsername("admin");
+        req.setAccount("admin");
         req.setPassword("TestPwd@2024");
         Set<ConstraintViolation<LoginRequest>> violations = validator.validate(req);
         assertTrue(violations.isEmpty());
     }
 
     @Test
-    @DisplayName("空用户名应该校验失败")
-    void blankUsernameShouldFail() {
+    @DisplayName("空账号应该校验失败")
+    void blankAccountShouldFail() {
         LoginRequest req = new LoginRequest();
-        req.setUsername("");
+        req.setAccount("");
         req.setPassword("TestPwd@2024");
         Set<ConstraintViolation<LoginRequest>> violations = validator.validate(req);
         assertFalse(violations.isEmpty());
-        assertTrue(violations.stream().anyMatch(v -> v.getMessage().contains("用户名")));
+        assertTrue(violations.stream().anyMatch(v -> v.getMessage().contains("不能为空")));
     }
 
     @Test
     @DisplayName("空密码应该校验失败")
     void blankPasswordShouldFail() {
         LoginRequest req = new LoginRequest();
-        req.setUsername("admin");
+        req.setAccount("admin");
         req.setPassword("");
         Set<ConstraintViolation<LoginRequest>> violations = validator.validate(req);
         assertFalse(violations.isEmpty());

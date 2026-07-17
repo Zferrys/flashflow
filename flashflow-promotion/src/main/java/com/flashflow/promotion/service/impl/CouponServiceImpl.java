@@ -149,6 +149,18 @@ public class CouponServiceImpl implements CouponService {
         return true;
     }
 
+    @Override
+    @Transactional
+    public boolean releaseByOrderSn(String orderSn) {
+        int affected = userCouponMapper.releaseByOrderSn(orderSn);
+        if (affected > 0) {
+            log.info("优惠券已释放: orderSn={}", orderSn);
+            return true;
+        }
+        log.info("无优惠券需释放: orderSn={}", orderSn);
+        return false;
+    }
+
     // ========== 工具方法 ==========
 
     private LambdaQueryWrapper<Coupon> baseAvailableQuery(LocalDateTime now) {

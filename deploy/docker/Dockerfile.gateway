@@ -3,7 +3,7 @@ WORKDIR /app
 RUN groupadd -r flashflow && useradd -r -g flashflow flashflow
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-COPY flashflow-gateway/target/*.jar app.jar
+COPY flashflow-gateway/target/flashflow-gateway-1.0.0-SNAPSHOT.jar app.jar
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD curl -sf http://localhost:8080/actuator/health || exit 1
 USER flashflow
 EXPOSE 8080

@@ -24,4 +24,9 @@ public interface UserCouponMapper extends BaseMapper<UserCoupon> {
     @Update("UPDATE user_coupon SET used = 1, used_time = #{usedTime}, order_sn = #{orderSn} " +
             "WHERE id = #{id} AND used = 0")
     int markUsed(@Param("id") Long id, @Param("orderSn") String orderSn, @Param("usedTime") LocalDateTime usedTime);
+
+    /** 根据订单号释放优惠券（退款/取消时调用，乐观锁防重复释放） */
+    @Update("UPDATE user_coupon SET used = 0, used_time = NULL, order_sn = NULL " +
+            "WHERE order_sn = #{orderSn} AND used = 1")
+    int releaseByOrderSn(@Param("orderSn") String orderSn);
 }

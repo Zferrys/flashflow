@@ -7,8 +7,23 @@
       </div>
 
       <el-form ref="formRef" :model="form" :rules="rules" label-width="0" size="large" @keyup.enter="handleRegister">
+        <el-form-item prop="email">
+          <el-input v-model="form.email" placeholder="邮箱（登录账号）" maxlength="100">
+            <template #prefix><span class="input-emoji">📧</span></template>
+          </el-input>
+        </el-form-item>
+        <el-form-item prop="verifyCode">
+          <div style="display:flex;gap:8px;width:100%">
+            <el-input v-model="form.verifyCode" placeholder="邮箱验证码" maxlength="6" style="flex:1">
+              <template #prefix><span class="input-emoji">🔑</span></template>
+            </el-input>
+            <el-button :disabled="codeSending || countdown > 0" :loading="codeSending" @click="sendVerifyCode" style="min-width:110px">
+              {{ countdown > 0 ? `${countdown}s后重发` : '发送验证码' }}
+            </el-button>
+          </div>
+        </el-form-item>
         <el-form-item prop="phone">
-          <el-input v-model="form.phone" placeholder="手机号" maxlength="11">
+          <el-input v-model="form.phone" placeholder="手机号（选填）" maxlength="11">
             <template #prefix><span class="input-emoji">📱</span></template>
           </el-input>
         </el-form-item>
@@ -68,16 +83,24 @@ import request from '@/api/request'
 const router = useRouter()
 const formRef = ref()
 const loading = ref(false)
+const codeSending = ref(false)
+const countdown = ref(0)
 
 const form = reactive({
+  email: '',
+  verifyCode: '',
   phone: '',
   nickname: '',
   password: '',
   confirmPassword: '',
 })
 
+const validateEmail = (_rule: any, value: string, callback: any) => {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) callback(new Error('请输入正确的邮箱地址'))
+  else callback()
+}
 const validatePhone = (_rule: any, value: string, callback: any) => {
-  if (!/^1[3-9]\d{9}$/.test(value)) callback(new Error('请输入正确的手机号'))
+  if (value && !/^1[3-9]\d{9}$/.test(value)) callback(new Error('请输入正确的手机号'))
   else callback()
 }
 const validatePassword = (_rule: any, value: string, callback: any) => {
@@ -91,8 +114,14 @@ const validateConfirm = (_rule: any, value: string, callback: any) => {
 }
 
 const rules = {
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { validator: validateEmail, trigger: 'blur' },
+  ],
+  verifyCode: [
+    { required: true, message: '请输入验证码', trigger: 'blur' },
+  ],
   phone: [
-    { required: true, message: '请输入手机号', trigger: 'blur' },
     { validator: validatePhone, trigger: 'blur' },
   ],
   password: [
@@ -105,13 +134,35 @@ const rules = {
   ],
 }
 
+async function sendVerifyCode() {
+  const email = form.email
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    ElMessage.warning('请先输入正确的邮箱地址')
+    return
+  }
+  codeSending.value = true
+  try {
+    await request.post('/auth/user/send-code', null, { params: { email } })
+    ElMessage.success('验证码已发送至您的邮箱')
+    countdown.value = 60
+    const timer = setInterval(() => {
+      countdown.value--
+      if (countdown.value <= 0) clearInterval(timer)
+    }, 1000)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || '发送失败')
+  } finally { codeSending.value = false }
+}
+
 async function handleRegister() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
   loading.value = true
   try {
     await request.post('/auth/user/register', {
-      phone: form.phone,
+      email: form.email,
+      verifyCode: form.verifyCode,
+      phone: form.phone || undefined,
       password: form.password,
       nickname: form.nickname || undefined,
     })

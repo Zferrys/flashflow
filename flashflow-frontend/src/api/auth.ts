@@ -1,7 +1,7 @@
 import request from './request'
 
 export interface LoginData {
-  username: string
+  account: string
   password: string
 }
 

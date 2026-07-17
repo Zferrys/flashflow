@@ -55,6 +55,17 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Override
     public DeductResult deduct(DeductRequest request) {
+        // 0. 幂等检查：同一订单 + 同一 SKU 不会重复扣减（SETNX 原子保证）
+        //    仅当 orderSn 非空时生效（MQ 消费场景），直接调用场景不受影响
+        if (request.orderSn() != null && !request.orderSn().isEmpty()) {
+            String idempotentKey = "flashflow:idempotent:deduct:" + request.orderSn() + ":" + request.skuId();
+            if (!redissonClient.getBucket(idempotentKey).setIfAbsent("1")) {
+                log.info("幂等返回: 已扣减过, orderSn={}, skuId={}", request.orderSn(), request.skuId());
+                return new DeductResult(true, 0, 0);
+            }
+            redissonClient.getBucket(idempotentKey).expire(java.time.Duration.ofSeconds(300));
+        }
+
         // 1. 计算分片：user_id % shard_count
         Inventory inventory = getBySkuId(request.skuId());
         if (inventory == null) {
@@ -194,7 +205,8 @@ public class InventoryServiceImpl implements InventoryService {
         List<InventoryShard> shards = inventoryShardMapper.selectBySkuId(skuId);
         for (InventoryShard shard : shards) {
             String key = "stock:" + skuId + ":" + shard.getShardIndex();
-            redissonClient.getBucket(key).set(shard.getShardStock());
+            // 必须存 String — Lua 脚本用 GET 读取，Kryo 序列化的 Integer 是二进制乱码
+            redissonClient.getBucket(key).set(String.valueOf(shard.getShardStock()));
         }
         log.info("Redis 预热完成: skuId={}, 分片数={}", skuId, shards.size());
     }
@@ -202,12 +214,27 @@ public class InventoryServiceImpl implements InventoryService {
     // ========== 私有方法 ==========
 
     /**
-     * 懒加载 Redis 分片库存：快速路径检查后委托 warmUp() 完成回灌。
+     * 懒加载 Redis 分片库存：分布式锁防止并发时多线程同时从 DB 回灌。
      */
     private void ensureRedisWarmed(Long skuId, String targetStockKey) {
         if (redissonClient.getBucket(targetStockKey).isExists()) return;
-        warmUp(skuId);
-        log.info("懒加载 Redis 分片完成: skuId={}", skuId);
+        RLock warmLock = redissonClient.getLock("lock:warmup:" + skuId);
+        try {
+            if (warmLock.tryLock(3, 5, java.util.concurrent.TimeUnit.SECONDS)) {
+                try {
+                    if (redissonClient.getBucket(targetStockKey).isExists()) return; // 双重检查
+                    warmUp(skuId);
+                    log.info("懒加载 Redis 分片完成: skuId={}", skuId);
+                } finally {
+                    warmLock.unlock();
+                }
+            } else {
+                log.warn("预热锁获取失败（可能其他线程正在预热）: skuId={}", skuId);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("预热锁被中断: skuId={}", skuId);
+        }
     }
 
     /** Fallback：尝试其他分片 */

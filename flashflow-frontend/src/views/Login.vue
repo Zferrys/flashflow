@@ -35,9 +35,9 @@
 
         <!-- 用户登录 -->
         <el-form v-if="!isAdmin" ref="userFormRef" :model="userForm" :rules="userRules" label-width="0" size="large" @keyup.enter="handleUserLogin">
-          <el-form-item prop="username">
-            <el-input v-model="userForm.username" placeholder="请输入手机号" maxlength="11">
-              <template #prefix><span class="input-prefix">📱</span></template>
+          <el-form-item prop="account">
+            <el-input v-model="userForm.account" placeholder="请输入邮箱" maxlength="100">
+              <template #prefix><span class="input-prefix">📧</span></template>
             </el-input>
           </el-form-item>
           <el-form-item prop="password">
@@ -52,8 +52,8 @@
 
         <!-- 管理员登录 -->
         <el-form v-else ref="adminFormRef" :model="adminForm" :rules="adminRules" label-width="0" size="large" @keyup.enter="handleAdminLogin">
-          <el-form-item prop="username">
-            <el-input v-model="adminForm.username" placeholder="请输入管理员用户名">
+          <el-form-item prop="account">
+            <el-input v-model="adminForm.account" placeholder="请输入管理员用户名">
               <template #prefix><span class="input-prefix">👤</span></template>
             </el-input>
           </el-form-item>
@@ -165,15 +165,22 @@ const adminFormRef = ref()
 const userLoading = ref(false)
 const adminLoading = ref(false)
 
-const userForm = reactive({ username: '', password: '' })
-const adminForm = reactive({ username: '', password: '' })
+const userForm = reactive({ account: '', password: '' })
+const adminForm = reactive({ account: '', password: '' })
 
+const validateEmail = (_rule: any, value: string, callback: any) => {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) callback(new Error('请输入正确的邮箱地址'))
+  else callback()
+}
 const userRules = {
-  username: [{ required: true, message: '请输入手机号', trigger: 'blur' }],
+  account: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { validator: validateEmail, trigger: 'blur' },
+  ],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 const adminRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  account: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
@@ -191,7 +198,7 @@ async function handleUserLogin() {
   if (!valid) return
   userLoading.value = true
   try {
-    const res = await request.post('/auth/user/login', userForm)
+    const res = await request.post('/auth/user/login', { account: userForm.account, password: userForm.password })
     const data = res.data
     userStore.setToken(data.accessToken, data.refreshToken)
     if (data.refreshToken) {
@@ -202,14 +209,14 @@ async function handleUserLogin() {
       const meRes = await request.get('/auth/me')
       if (meRes.data) {
         userStore.setUserInfo({
-          id: meRes.data.id,
+          id: meRes.data.userId || meRes.data.id,
           username: meRes.data.username,
           roleCode: meRes.data.roleCode || 'ROLE_USER'
         })
       }
     } catch {
       // 获取用户信息失败不影响登录
-      userStore.setUserInfo({ id: 0, username: userForm.username, roleCode: 'ROLE_USER' })
+      userStore.setUserInfo({ id: 0, username: userForm.account, roleCode: 'ROLE_USER' })
     }
     ElMessage.success('登录成功')
     router.push(getRedirect() || '/')

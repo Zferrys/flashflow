@@ -8,22 +8,23 @@
         <outputRelativeToContentRoot value="true" />
         <module name="flashflow-common" />
         <module name="flashflow-auth" />
+        <module name="flashflow-order" />
+        <module name="flashflow-promotion" />
         <module name="flashflow-gateway" />
         <module name="flashflow-inventory" />
-        <module name="flashflow-order" />
         <module name="flashflow-payment" />
-        <module name="flashflow-promotion" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="flashflow" target="17" />
-      <module name="flashflow-auth" target="17" />
-      <module name="flashflow-common" target="17" />
-      <module name="flashflow-gateway" target="17" />
-      <module name="flashflow-inventory" target="17" />
-      <module name="flashflow-order" target="17" />
-      <module name="flashflow-payment" target="17" />
-      <module name="flashflow-promotion" target="17" />
-    </bytecodeTargetLevel>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="flashflow-auth" options="-parameters" />
+      <module name="flashflow-common" options="-parameters" />
+      <module name="flashflow-gateway" options="-parameters" />
+      <module name="flashflow-inventory" options="-parameters" />
+      <module name="flashflow-order" options="-parameters" />
+      <module name="flashflow-payment" options="-parameters" />
+      <module name="flashflow-promotion" options="-parameters" />
+    </option>
   </component>
 </project>

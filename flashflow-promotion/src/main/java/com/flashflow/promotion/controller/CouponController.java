@@ -1,6 +1,8 @@
 package com.flashflow.promotion.controller;
 import com.flashflow.common.context.UserContext;
+import com.flashflow.common.domain.ErrorCode;
 import com.flashflow.common.domain.R;
+import com.flashflow.common.exception.BusinessException;
 import com.flashflow.promotion.dto.CouponVO;
 import com.flashflow.promotion.entity.Coupon;
 import com.flashflow.promotion.service.CouponService;
@@ -61,10 +63,16 @@ public class CouponController {
         return R.ok(couponService.markAsUsed(userCouponId, orderSn));
     }
 
+    @Operation(summary = "释放优惠券（取消订单/退款时调用——内部接口）")
+    @PostMapping("/internal/release")
+    public R<Boolean> releaseCoupon(@RequestParam String orderSn) {
+        return R.ok(couponService.releaseByOrderSn(orderSn));
+    }
+
     // ========== 管理后台（仅管理员） ==========
 
     private void checkAdmin() {
-        if (!UserContext.isAdmin()) throw new RuntimeException("无管理员权限");
+        if (!UserContext.isAdmin()) throw new BusinessException(ErrorCode.FORBIDDEN);
     }
 
     @Operation(summary = "优惠券列表（管理后台）")

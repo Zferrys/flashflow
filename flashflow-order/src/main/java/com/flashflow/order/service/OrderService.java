@@ -14,7 +14,7 @@ import java.util.List;
 public interface OrderService {
 
     /** 创建订单 */
-    OrderInfo createOrder(OrderInfo order, List<OrderItemDTO> items);
+    OrderInfo createOrder(OrderInfo order, List<OrderItemDTO> items, Long userCouponId);
 
     /** 订单分页 */
     IPage<OrderInfo> page(Page<OrderInfo> page, Long userId, Integer status);
@@ -31,8 +31,20 @@ public interface OrderService {
     /** 取消订单——状态机 PENDING → CANCELLED */
     void cancel(Long orderId, Long userId, String reason);
 
-    /** 退款完成——状态机 PAID → REFUNDED */
+    /** 退款完成——状态机 PAID → REFUNDED（从PAID直退，兼容旧流程） */
     void refundSuccess(Long orderId, String reason);
+
+    /** 申请退款（用户）—— PAID → REFUNDING */
+    void requestRefund(Long orderId, Long userId, String reason);
+
+    /** 审批退款（管理员）—— REFUNDING → REFUNDED，触发库存释放 */
+    void approveRefund(Long orderId);
+
+    /** 拒绝退款（管理员）—— REFUNDING → PAID */
+    void rejectRefund(Long orderId, String reason);
+
+    /** 退款中订单列表（管理员） */
+    List<OrderInfo> getRefundPendingList();
 
     /** 确认收货——状态机 SHIPPED → DELIVERED */
     void confirmDelivery(Long orderId);

@@ -19,12 +19,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RAtomicLong;
 import org.redisson.api.RedissonClient;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 订单服务实现（状态机 + Event Sourcing）
@@ -39,24 +43,59 @@ public class OrderServiceImpl implements OrderService {
     private final OrderEventMapper orderEventMapper;
     private final RedissonClient redissonClient;
     private final OrderEventPublisher orderEventPublisher;
+    private final RestTemplate restTemplate;
 
     /** Redis 订单号自增 Key */
     private static final String ORDER_SN_KEY = "flashflow:order:sn:incr";
 
+    /** Promotion 服务地址 */
+    private static final String PROMOTION_BASE = "http://127.0.0.1:8100/api/flashflow/promotion";
+
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public OrderInfo createOrder(OrderInfo order, List<OrderItemDTO> items) {
+    public OrderInfo createOrder(OrderInfo order, List<OrderItemDTO> items, Long userCouponId) {
         // 生成订单号
         String orderSn = generateOrderSn();
         order.setOrderSn(orderSn);
         order.setStatus(OrderStatus.PENDING.getCode());
 
-        // 计算金额
+        // 计算商品总额
         BigDecimal total = items.stream()
                 .map(i -> i.price().multiply(BigDecimal.valueOf(i.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         order.setTotalAmount(total);
-        order.setPayAmount(total);
+
+        // 优惠券处理：调 promotion 服务计算折扣并核销
+        BigDecimal discountAmount = BigDecimal.ZERO;
+        Long couponId = null;
+        if (userCouponId != null) {
+            try {
+                // 1. 调 promotion 服务计算折扣（服务端验证，防伪造）
+                String calcUrl = PROMOTION_BASE + "/coupon/calculate?userCouponId="
+                        + userCouponId + "&amount=" + total;
+                var calcResp = restTemplate.exchange(calcUrl, HttpMethod.GET, null,
+                        new ParameterizedTypeReference<Map<String, Object>>() {});
+                if (calcResp.getBody() != null && calcResp.getBody().get("data") != null) {
+                    discountAmount = new BigDecimal(calcResp.getBody().get("data").toString());
+                }
+                // 2. 折扣大于0才核销
+                if (discountAmount.compareTo(BigDecimal.ZERO) > 0) {
+                    String markUrl = PROMOTION_BASE + "/coupon/mark-used?userCouponId="
+                            + userCouponId + "&orderSn=" + orderSn;
+                    var markResp = restTemplate.exchange(markUrl, HttpMethod.POST, null,
+                            new ParameterizedTypeReference<Map<String, Object>>() {});
+                    if (markResp.getBody() == null || !Boolean.TRUE.equals(markResp.getBody().get("data"))) {
+                        log.warn("优惠券核销失败: userCouponId={}", userCouponId);
+                        discountAmount = BigDecimal.ZERO; // 核销失败则不使用优惠券
+                    }
+                }
+            } catch (Exception e) {
+                log.error("优惠券服务调用异常，降级不使用优惠券: userCouponId={}", userCouponId, e);
+                discountAmount = BigDecimal.ZERO;
+            }
+        }
+        order.setDiscountAmount(discountAmount);
+        order.setPayAmount(total.subtract(discountAmount));
 
         // 保存订单
         orderInfoMapper.insert(order);
@@ -78,10 +117,11 @@ public class OrderServiceImpl implements OrderService {
         // 记录事件
         recordEvent(order.getId(), orderSn, null, OrderStatus.PENDING, 0, 0L, null);
 
-        // 发布 MQ 事件（Saga: 通知库存模块扣减库存）
-        orderEventPublisher.publishOrderCreated(orderSn, order.getUserId(), items, total);
+        // 发布 MQ 事件（Saga: 通知库存模块扣减库存，使用实付金额）
+        orderEventPublisher.publishOrderCreated(orderSn, order.getUserId(), items, order.getPayAmount());
 
-        log.info("订单创建成功: orderSn={}, amount={}", orderSn, total);
+        log.info("订单创建成功: orderSn={}, total={}, discount={}, pay={}",
+                orderSn, total, discountAmount, order.getPayAmount());
         return order;
     }
 
@@ -139,6 +179,16 @@ public class OrderServiceImpl implements OrderService {
         // 发布 MQ 事件（Saga: 通知库存模块释放库存）
         List<OrderItem> items = orderItemMapper.selectByOrderId(orderId);
         orderEventPublisher.publishOrderCancelled(order.getOrderSn(), reason, items);
+        // 释放已使用的优惠券
+        if (order.getDiscountAmount() != null && order.getDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
+            try {
+                String releaseUrl = PROMOTION_BASE + "/coupon/internal/release?orderSn=" + order.getOrderSn();
+                restTemplate.postForObject(releaseUrl, null, String.class);
+                log.info("取消订单，优惠券已释放: orderSn={}", order.getOrderSn());
+            } catch (Exception e) {
+                log.error("取消订单释放优惠券失败（优惠券服务不可用）: orderSn={}", order.getOrderSn(), e);
+            }
+        }
         log.info("订单已取消: orderSn={}", order.getOrderSn());
     }
 
@@ -151,7 +201,90 @@ public class OrderServiceImpl implements OrderService {
         order.setCancelTime(LocalDateTime.now());
         orderInfoMapper.updateById(order);
         recordEvent(order.getId(), order.getOrderSn(), null, OrderStatus.REFUNDED, 0, 0L, reason);
-        log.info("订单已退款: orderSn={}", order.getOrderSn());
+
+        // 获取订单商品明细
+        List<OrderItem> items = orderItemMapper.selectByOrderId(orderId);
+
+        // 发布 MQ 事件：通知库存模块释放库存（Saga 补偿）
+        orderEventPublisher.publishOrderRefunded(order.getOrderSn(), items, reason);
+
+        // 同步调用 promotion 服务释放优惠券
+        if (order.getDiscountAmount() != null && order.getDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
+            try {
+                String releaseUrl = PROMOTION_BASE + "/coupon/internal/release?orderSn=" + order.getOrderSn();
+                restTemplate.postForObject(releaseUrl, null, String.class);
+                log.info("退款时优惠券已释放: orderSn={}", order.getOrderSn());
+            } catch (Exception e) {
+                log.error("退款释放优惠券失败（优惠券服务不可用）: orderSn={}", order.getOrderSn(), e);
+            }
+        }
+
+        log.info("订单已退款: orderSn={}, 库存释放+优惠券释放已触发", order.getOrderSn());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void requestRefund(Long orderId, Long userId, String reason) {
+        OrderInfo order = getById(orderId);
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "只能申请退款自己的订单");
+        }
+        // 只允许从 PAID 或 SHIPPED 申请退款
+        if (order.getStatus() != OrderStatus.PAID.getCode()
+                && order.getStatus() != OrderStatus.SHIPPED.getCode()) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_ERROR, "当前订单状态不支持申请退款");
+        }
+        doTransition(order, OrderStatus.REFUNDING);
+        order.setCancelReason(reason);
+        orderInfoMapper.updateById(order);
+        log.info("退款申请已提交: orderSn={}", order.getOrderSn());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void approveRefund(Long orderId) {
+        OrderInfo order = getById(orderId);
+        doTransition(order, OrderStatus.REFUNDED);
+        order.setCancelTime(LocalDateTime.now());
+        orderInfoMapper.updateById(order);
+
+        // 获取订单商品明细
+        List<OrderItem> items = orderItemMapper.selectByOrderId(orderId);
+
+        // 发布 MQ 事件 → 通知库存模块释放库存
+        orderEventPublisher.publishOrderRefunded(order.getOrderSn(), items, "管理员审批退款");
+
+        // 释放优惠券
+        if (order.getDiscountAmount() != null && order.getDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
+            try {
+                String releaseUrl = PROMOTION_BASE + "/coupon/internal/release?orderSn=" + order.getOrderSn();
+                restTemplate.postForObject(releaseUrl, null, String.class);
+                log.info("退款审批：优惠券已释放: orderSn={}", order.getOrderSn());
+            } catch (Exception e) {
+                log.error("退款审批释放优惠券失败: orderSn={}", order.getOrderSn(), e);
+            }
+        }
+
+        recordEvent(order.getId(), order.getOrderSn(), OrderStatus.REFUNDING, OrderStatus.REFUNDED, 2, 0L, "管理员审批通过");
+        log.info("退款已审批通过: orderSn={}", order.getOrderSn());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void rejectRefund(Long orderId, String reason) {
+        OrderInfo order = getById(orderId);
+        doTransition(order, OrderStatus.PAID); // 回到已支付状态
+        order.setCancelReason("退款已拒绝: " + (reason != null ? reason : ""));
+        orderInfoMapper.updateById(order);
+        recordEvent(order.getId(), order.getOrderSn(), OrderStatus.REFUNDING, OrderStatus.PAID, 2, 0L, reason);
+        log.info("退款已拒绝: orderSn={}", order.getOrderSn());
+    }
+
+    @Override
+    public List<OrderInfo> getRefundPendingList() {
+        return orderInfoMapper.selectList(new LambdaQueryWrapper<OrderInfo>()
+                .eq(OrderInfo::getStatus, OrderStatus.REFUNDING.getCode())
+                .orderByAsc(OrderInfo::getCreateTime));
     }
 
     @Override

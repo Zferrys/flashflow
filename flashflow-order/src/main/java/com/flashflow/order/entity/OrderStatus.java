@@ -42,7 +42,7 @@ public enum OrderStatus {
     static {
         TRANSITIONS.put(PENDING,    new HashSet<>(Arrays.asList(PAID, CANCELLED)));
         TRANSITIONS.put(PAID,       new HashSet<>(Arrays.asList(SHIPPED, REFUNDING, REFUNDED, CANCELLED)));
-        TRANSITIONS.put(SHIPPED,    new HashSet<>(Arrays.asList(DELIVERED)));
+        TRANSITIONS.put(SHIPPED,    new HashSet<>(Arrays.asList(DELIVERED, REFUNDING)));
         TRANSITIONS.put(DELIVERED,  new HashSet<>(Arrays.asList(COMPLETED)));
         TRANSITIONS.put(REFUNDING,  new HashSet<>(Arrays.asList(REFUNDED, PAID)));   // 撤销退款
         // COMPLETED, CANCELLED, REFUNDED 为终态

@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS order_info (
   UNIQUE KEY `uk_order_sn` (`order_sn`),
   KEY `idx_user_id` (`user_id`),
   KEY `idx_status` (`status`),
-  KEY `idx_create_time` (`create_time`)
+  KEY `idx_create_time` (`create_time`),
+  KEY `idx_user_status` (`user_id`, `status`, `create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单主表';
 
 -- 订单明细
@@ -56,7 +57,7 @@ CREATE TABLE IF NOT EXISTS order_event (
   `operator`      bigint(20)  DEFAULT NULL COMMENT '操作人ID',
   `operator_type` tinyint(4)  NOT NULL DEFAULT '0' COMMENT '操作人类型 0系统 1用户 2管理员',
   `event_time`    datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '事件时间',
-  `extra_data`    json        DEFAULT NULL COMMENT '扩展数据(JSON)',
+  `extra_data`    varchar(500) DEFAULT NULL COMMENT '扩展数据',
   PRIMARY KEY (`id`),
   KEY `idx_order_id` (`order_id`),
   KEY `idx_event_time` (`event_time`)
@@ -79,5 +80,40 @@ CREATE TABLE IF NOT EXISTS local_transaction (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_message_id` (`message_id`),
   KEY `idx_status` (`status`),
+  KEY `idx_status_retry` (`status`, `retry_count`, `create_time`),
   KEY `idx_business` (`business_type`,`business_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='本地事务表(Saga 可靠性保证)';
+
+-- 购物车
+CREATE TABLE IF NOT EXISTS cart (
+  `id`          bigint(20)   NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id`     bigint(20)   NOT NULL COMMENT '用户ID',
+  `sku_id`      bigint(20)   NOT NULL COMMENT 'SKU_ID',
+  `sku_name`    varchar(200) DEFAULT NULL COMMENT '商品名称',
+  `sku_image`   varchar(500) DEFAULT NULL COMMENT '商品图片',
+  `price`       decimal(10,2) DEFAULT NULL COMMENT '商品价格',
+  `quantity`    int(11)      NOT NULL DEFAULT '1' COMMENT '数量',
+  `checked`     tinyint(4)   NOT NULL DEFAULT '1' COMMENT '是否选中 1是 0否',
+  `create_time` datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime     DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_sku_id` (`sku_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='购物车';
+
+-- 收货地址（订单模块独立维护，下单时快照）
+CREATE TABLE IF NOT EXISTS delivery_address (
+  `id`             bigint(20)   NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id`        bigint(20)   NOT NULL COMMENT '用户ID',
+  `receiver_name`  varchar(50)  NOT NULL COMMENT '收货人姓名',
+  `receiver_phone` varchar(20)  NOT NULL COMMENT '收货人手机号',
+  `province`       varchar(20)  NOT NULL COMMENT '省',
+  `city`           varchar(20)  NOT NULL COMMENT '市',
+  `district`       varchar(20)  NOT NULL COMMENT '区',
+  `detail_address` varchar(200) NOT NULL COMMENT '详细地址',
+  `is_default`     tinyint(4)   NOT NULL DEFAULT '0' COMMENT '是否默认 1是 0否',
+  `create_time`    datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time`    datetime     DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收货地址(订单模块)';

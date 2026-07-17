@@ -48,7 +48,7 @@ class ErrorCodeTest {
     @DisplayName("认证错误码范围应该在 110000-119999")
     void authErrorCodeRange() {
         assertEquals(110001, ErrorCode.TOKEN_EXPIRED.getCode());
-        assertEquals(110011, ErrorCode.CAPTCHA_ERROR.getCode());
+        assertEquals(110012, ErrorCode.CAPTCHA_ERROR.getCode());
     }
 
     @Test

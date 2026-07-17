@@ -65,6 +65,12 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
 
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 3000
+
 # Gateway 认证配置
 jwt:
   secret: ${JWT_SECRET}
@@ -79,9 +85,9 @@ gateway:
       - /api/flashflow/auth/user/send-code
       - /api/flashflow/auth/user/verify-code
       - /api/flashflow/payment/notify
-      - /api/flashflow/payment/mock-pay
+      # mock-pay 已从白名单移除，需认证后才能调用（生产环境应彻底关闭）
       - /api/flashflow/promotion/flash/now
-      - /api/flashflow/promotion/activity
+      - /api/flashflow/promotion/activity/page
       - /api/flashflow/promotion/product/spu
       - /api/flashflow/promotion/product/sku
       - /api/flashflow/promotion/coupon/available
@@ -90,7 +96,6 @@ gateway:
       - /doc.html
       - /webjars
       - /actuator
-      - /druid
       - /health
 
 spring.cloud.nacos.discovery:

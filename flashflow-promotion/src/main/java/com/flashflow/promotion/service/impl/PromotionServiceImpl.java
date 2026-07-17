@@ -302,15 +302,21 @@ public class PromotionServiceImpl implements PromotionService {
             HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(orderRequest), headers);
 
             String response = restTemplate.postForObject(orderServiceUrl, entity, String.class);
-            // 响应格式: {"code":0,"msg":"...","data":{"orderSn":"FF..."}}
-            if (response != null && response.contains("\"orderSn\"")) {
-                int snStart = response.indexOf("\"orderSn\":\"") + 11;
-                if (snStart > 11) {
-                    int snEnd = response.indexOf("\"", snStart);
-                    return response.substring(snStart, snEnd);
+            if (response != null) {
+                try {
+                    com.flashflow.common.domain.R<?> r = objectMapper.readValue(response,
+                            objectMapper.getTypeFactory().constructParametricType(
+                                    com.flashflow.common.domain.R.class, java.util.Map.class));
+                    if (r.getData() instanceof java.util.Map<?, ?> dataMap) {
+                        Object orderSn = dataMap.get("orderSn");
+                        if (orderSn != null) {
+                            return orderSn.toString();
+                        }
+                    }
+                } catch (Exception parseEx) {
+                    log.error("订单响应 JSON 解析失败: {}", response, parseEx);
                 }
             }
-            log.warn("订单服务返回异常: {}", response);
         } catch (Exception e) {
             log.error("创建秒杀订单失败: skuId={}, userId={}", sku.getSkuId(), request.userId(), e);
         }
