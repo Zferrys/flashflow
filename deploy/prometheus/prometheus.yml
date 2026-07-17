@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'flashflow-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['gateway:5050']
+
+  - job_name: 'flashflow-auth'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['auth:8080']
+
+  - job_name: 'flashflow-promotion'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['promotion:8090']
+
+  - job_name: 'flashflow-order'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['order:8100']
+
+  - job_name: 'flashflow-inventory'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['inventory:8110']
+
+  - job_name: 'flashflow-payment'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['payment:8120']

@@ -1,0 +1,69 @@
+# Java
+*.class
+*.jar
+*.war
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+*.local.yml
+
+# Maven
+dependency-reduced-pom.xml
+
+# Docker
+docker-compose.override.yml
+
+# Build
+dist/
+build/
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Root screenshots (test artifacts)
+/*.png
+/*.jpg
+
+# Playwright MCP test artifacts
+.playwright-mcp/
+
+# Derby embedded database log
+derby.log
+
+# Working directory
+work/
+
+# Auto-generated TypeScript declarations
+flashflow-frontend/auto-imports.d.ts
+flashflow-frontend/components.d.ts
+
+# Claude AI configuration
+.claude/
+
+# Test upload images (hash-named)
+flashflow-frontend/public/assets/products/[0-9a-f]*.png
+flashflow-frontend/public/assets/products/[0-9a-f]*.jpg

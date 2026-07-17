@@ -1,0 +1,30 @@
+# Docker 环境 Gateway 配置
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: nacos:8848
+        namespace: ${NACOS_NAMESPACE:dev}
+    gateway:
+      routes:
+        - id: flashflow-auth
+          uri: lb://flashflow-auth
+          predicates: [Path=/api/flashflow/auth/**]
+        - id: flashflow-promotion
+          uri: lb://flashflow-promotion
+          predicates: [Path=/api/flashflow/promotion/**]
+        - id: flashflow-order
+          uri: lb://flashflow-order
+          predicates: [Path=/api/flashflow/order/**]
+        - id: flashflow-inventory
+          uri: lb://flashflow-inventory
+          predicates: [Path=/api/flashflow/inventory/**]
+        - id: flashflow-payment
+          uri: lb://flashflow-payment
+          predicates: [Path=/api/flashflow/payment/**]
+# JWT 配置 — 生产环境必须通过环境变量覆盖！
+jwt:
+  secret: ${JWT_SECRET}
+logging:
+  level:
+    com.flashflow: INFO

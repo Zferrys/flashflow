@@ -1,0 +1,61 @@
+server:
+  port: 8120
+  shutdown: graceful
+
+spring:
+  application:
+    name: flashflow-payment
+  profiles:
+    active: dev
+
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/flashflow_payment?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: root
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+spring.cloud.nacos.discovery:
+  server-addr: 127.0.0.1:8848
+  namespace: dev
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  global-config:
+    db-config:
+      id-type: auto
+  configuration:
+    map-underscore-to-camel-case: true
+
+logging:
+  file:
+    path: logs/${spring.application.name}
+  level:
+    com.flashflow: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

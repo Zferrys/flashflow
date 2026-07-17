@@ -1,0 +1,13 @@
+# Gateway 模块开发环境配置
+spring.cloud.nacos.discovery:
+  server-addr: 127.0.0.1:8848
+  namespace: dev
+  ip: 127.0.0.1
+
+# JWT 配置 — 必须与 Auth 模块完全一致！
+jwt:
+  secret: ${JWT_SECRET}
+
+logging:
+  level:
+    com.flashflow: DEBUG

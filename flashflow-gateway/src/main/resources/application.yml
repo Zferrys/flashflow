@@ -1,0 +1,111 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: flashflow-gateway
+  profiles:
+    active: dev
+
+  cloud:
+    gateway:
+      routes:
+        # Auth 服务
+        - id: flashflow-auth
+          uri: lb://flashflow-auth
+          predicates:
+            - Path=/api/flashflow/auth/**
+
+        # Promotion 服务
+        - id: flashflow-promotion
+          uri: lb://flashflow-promotion
+          predicates:
+            - Path=/api/flashflow/promotion/**
+
+        # Order 服务
+        - id: flashflow-order
+          uri: lb://flashflow-order
+          predicates:
+            - Path=/api/flashflow/order/**
+
+        # Inventory 服务
+        - id: flashflow-inventory
+          uri: lb://flashflow-inventory
+          predicates:
+            - Path=/api/flashflow/inventory/**
+
+        # Payment 服务
+        - id: flashflow-payment
+          uri: lb://flashflow-payment
+          predicates:
+            - Path=/api/flashflow/payment/**
+
+      # 全局跨域配置（allowCredentials=true 时不允许通配符 origin）
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "http://localhost:*"
+              - "http://127.0.0.1:*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+# Gateway 认证配置
+jwt:
+  secret: ${JWT_SECRET}
+
+gateway:
+  auth:
+    white-list:
+      - /api/flashflow/auth/login
+      - /api/flashflow/auth/refresh
+      - /api/flashflow/auth/user/register
+      - /api/flashflow/auth/user/login
+      - /api/flashflow/auth/user/send-code
+      - /api/flashflow/auth/user/verify-code
+      - /api/flashflow/payment/notify
+      - /api/flashflow/payment/mock-pay
+      - /api/flashflow/promotion/flash/now
+      - /api/flashflow/promotion/activity
+      - /api/flashflow/promotion/product/spu
+      - /api/flashflow/promotion/product/sku
+      - /api/flashflow/promotion/coupon/available
+      - /swagger-ui
+      - /v3/api-docs
+      - /doc.html
+      - /webjars
+      - /actuator
+      - /druid
+      - /health
+
+spring.cloud.nacos.discovery:
+  server-addr: 127.0.0.1:8848
+  namespace: dev
+  ip: 127.0.0.1
+
+logging:
+  file:
+    path: logs/${spring.application.name}
+  level:
+    com.flashflow: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

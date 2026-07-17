@@ -1,0 +1,10 @@
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+RUN groupadd -r flashflow && useradd -r -g flashflow flashflow
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+COPY flashflow-auth/target/flashflow-auth-1.0.0-SNAPSHOT.jar app.jar
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD curl -sf http://localhost:8090/actuator/health || exit 1
+USER flashflow
+EXPOSE 8090
+ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=${SPRING_PROFILES_ACTIVE:-docker}"]

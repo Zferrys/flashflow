@@ -1,0 +1,164 @@
+version: '3.8'
+
+networks:
+  flashflow-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
+  nacos_data:
+  prometheus_data:
+  grafana_data:
+
+services:
+  # ───────────── 基础设施 ─────────────
+  mysql:
+    image: mysql:8.0
+    container_name: flashflow-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - flashflow-net
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: flashflow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - flashflow-net
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: flashflow-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - flashflow-net
+    restart: unless-stopped
+
+  nacos:
+    image: nacos/nacos-server:v2.4.3
+    container_name: flashflow-nacos
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    environment:
+      MODE: standalone
+      TZ: Asia/Shanghai
+    volumes:
+      - nacos_data:/home/nacos/data
+    networks:
+      - flashflow-net
+    restart: unless-stopped
+
+  # ───────────── API 网关 ─────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.gateway
+    container_name: flashflow-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      nacos:
+        condition: service_started
+    networks:
+      - flashflow-net
+    restart: unless-stopped
+
+  # ───────────── 微服务 ─────────────
+  auth:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.auth
+    container_name: flashflow-auth
+    depends_on:
+      nacos: { condition: service_started }
+      mysql: { condition: service_healthy }
+      redis: { condition: service_started }
+    networks: [flashflow-net]
+    restart: unless-stopped
+
+  promotion:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.promotion
+    container_name: flashflow-promotion
+    depends_on: [nacos, mysql, redis, rabbitmq]
+    networks: [flashflow-net]
+    restart: unless-stopped
+
+  order:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.order
+    container_name: flashflow-order
+    depends_on: [nacos, mysql, redis, rabbitmq]
+    networks: [flashflow-net]
+    restart: unless-stopped
+
+  inventory:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.inventory
+    container_name: flashflow-inventory
+    depends_on: [nacos, redis, rabbitmq]
+    networks: [flashflow-net]
+    restart: unless-stopped
+
+  payment:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.payment
+    container_name: flashflow-payment
+    depends_on: [nacos, mysql, redis, rabbitmq]
+    networks: [flashflow-net]
+    restart: unless-stopped
+
+  # ───────────── 前端 ─────────────
+  frontend:
+    image: nginx:1.25-alpine
+    container_name: flashflow-frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./flashflow-frontend/dist:/usr/share/nginx/html:ro
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - gateway
+    networks: [flashflow-net]
+    restart: unless-stopped

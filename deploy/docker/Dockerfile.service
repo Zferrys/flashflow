@@ -1,0 +1,40 @@
+# ========== 构建阶段 ==========
+FROM maven:3.9-eclipse-temurin-17 AS builder
+WORKDIR /build
+COPY pom.xml .
+COPY flashflow-common/pom.xml flashflow-common/
+COPY flashflow-auth/pom.xml flashflow-auth/
+COPY flashflow-promotion/pom.xml flashflow-promotion/
+COPY flashflow-inventory/pom.xml flashflow-inventory/
+COPY flashflow-order/pom.xml flashflow-order/
+COPY flashflow-payment/pom.xml flashflow-payment/
+COPY flashflow-gateway/pom.xml flashflow-gateway/
+
+# 先下载依赖（利用 Docker 层缓存）
+RUN mvn dependency:go-offline -B
+
+# 构建
+COPY . .
+RUN mvn clean package -DskipTests -P dev
+
+# ========== 运行阶段（极小镜像）==========
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+
+# 创建非 root 用户
+RUN groupadd -r flashflow && useradd -r -g flashflow flashflow
+
+# 时区
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD curl -sf http://localhost:8080/actuator/health || exit 1
+
+USER flashflow
+EXPOSE 8080
+
+ENTRYPOINT ["java", \
+  "-jar", "app.jar", \
+  "--spring.profiles.active=${SPRING_PROFILES_ACTIVE:-docker}"]
