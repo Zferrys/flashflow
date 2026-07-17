@@ -138,6 +138,13 @@ public class PromotionController {
         return R.ok(promotionService.countActivities());
     }
 
+    @Operation(summary = "释放秒杀限购（订单取消/退款时由 Order 服务调用，内部接口）")
+    @PostMapping("/flash/release-lock")
+    public R<Void> releaseLock(@RequestParam Long userId, @RequestParam Long skuId) {
+        promotionService.releaseBuyLimit(userId, skuId);
+        return R.ok();
+    }
+
     @Operation(summary = "当前进行中的秒杀（status=1即将开始 + status=2进行中，未过期）")
     @GetMapping("/flash/now")
     public R<List<PromotionActivity>> flashNow() {

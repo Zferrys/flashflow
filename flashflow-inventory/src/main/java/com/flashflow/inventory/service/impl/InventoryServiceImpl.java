@@ -2,7 +2,6 @@ package com.flashflow.inventory.service.impl;
 
 import com.flashflow.common.domain.ErrorCode;
 import com.flashflow.common.exception.BusinessException;
-import com.flashflow.common.util.ScriptUtil;
 import com.flashflow.inventory.dao.InventoryLogMapper;
 import com.flashflow.inventory.dao.InventoryMapper;
 import com.flashflow.inventory.dao.InventoryShardMapper;
@@ -12,8 +11,8 @@ import com.flashflow.inventory.entity.InventoryShard;
 import com.flashflow.inventory.service.InventoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RAtomicLong;
 import org.redisson.api.RLock;
-import org.redisson.api.RScript;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +21,9 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 库存服务实现（核心：分片 + Redisson 锁 + Lua 原子扣减）
+ * 库存服务实现（核心：分片 + Redisson 锁 + RAtomicLong 原子扣减）
+ *
+ * 与 promotion 模块共享 stock:{skuId}:{shard} 键，统一使用 RAtomicLong 编码。
  */
 @Slf4j
 @Service
@@ -33,10 +34,6 @@ public class InventoryServiceImpl implements InventoryService {
     private final InventoryShardMapper inventoryShardMapper;
     private final InventoryLogMapper inventoryLogMapper;
     private final RedissonClient redissonClient;
-
-    /** Lua 脚本（通过 ScriptUtil 懒加载 + 缓存） */
-    private static final String SCRIPT_DEDUCT = "lua/deduct.lua";
-    private static final String SCRIPT_RELEASE = "lua/release.lua";
 
     /** 默认分片数 */
     private static final int DEFAULT_SHARD_COUNT = 16;
@@ -55,8 +52,7 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Override
     public DeductResult deduct(DeductRequest request) {
-        // 0. 幂等检查：同一订单 + 同一 SKU 不会重复扣减（SETNX 原子保证）
-        //    仅当 orderSn 非空时生效（MQ 消费场景），直接调用场景不受影响
+        // 0. 幂等检查
         if (request.orderSn() != null && !request.orderSn().isEmpty()) {
             String idempotentKey = "flashflow:idempotent:deduct:" + request.orderSn() + ":" + request.skuId();
             if (!redissonClient.getBucket(idempotentKey).setIfAbsent("1")) {
@@ -66,7 +62,7 @@ public class InventoryServiceImpl implements InventoryService {
             redissonClient.getBucket(idempotentKey).expire(java.time.Duration.ofSeconds(300));
         }
 
-        // 1. 计算分片：user_id % shard_count
+        // 1. 计算分片
         Inventory inventory = getBySkuId(request.skuId());
         if (inventory == null) {
             throw new BusinessException(ErrorCode.STOCK_SKU_NOT_FOUND);
@@ -74,14 +70,13 @@ public class InventoryServiceImpl implements InventoryService {
         int shardCount = inventory.getShardCount() != null ? inventory.getShardCount() : DEFAULT_SHARD_COUNT;
         int shardIndex = (int) (request.userId() % shardCount);
 
-        // 2. Redis 分片 key
         String stockKey = "stock:" + request.skuId() + ":" + shardIndex;
         String lockKey = "lock:stock:" + request.skuId() + ":" + shardIndex;
 
-        // 3. 懒加载：Redis key 不存在时从 DB 回灌（首次下单自动预热，无需手动 warmUp）
+        // 2. 懒加载
         ensureRedisWarmed(request.skuId(), stockKey);
 
-        // 4. 获取分布式锁
+        // 3. 获取分布式锁
         RLock lock = redissonClient.getLock(lockKey);
         boolean locked = false;
         try {
@@ -91,32 +86,25 @@ public class InventoryServiceImpl implements InventoryService {
                 throw new BusinessException(ErrorCode.STOCK_LOCK_FAILED);
             }
 
-            // 5. 执行 Lua 脚本扣库存
-            String deductScript = ScriptUtil.load(SCRIPT_DEDUCT);
-            RScript rScript = redissonClient.getScript();
-            Long result = rScript.eval(
-                    RScript.Mode.READ_WRITE,
-                    deductScript,
-                    RScript.ReturnType.INTEGER,
-                    Collections.singletonList(stockKey),
-                    String.valueOf(request.quantity())
-            );
-
-            if (result == null || result == 0) {
-                log.warn("库存不足或分片耗尽: skuId={}, shard={}, 剩余={}",
-                        request.skuId(), shardIndex,
-                        redissonClient.getBucket(stockKey).get());
-                // 尝试 fallback 到其他分片
+            // 4. RAtomicLong 原子扣减（与 promotion 模块编码一致）
+            RAtomicLong stockCounter = redissonClient.getAtomicLong(stockKey);
+            if (!stockCounter.isExists()) {
+                log.warn("库存分片不存在: key={}", stockKey);
+                return tryFallback(request, inventory, shardIndex);
+            }
+            long afterStock = stockCounter.addAndGet(-request.quantity());
+            if (afterStock < 0) {
+                stockCounter.addAndGet(request.quantity()); // 回退
+                log.warn("库存不足: skuId={}, shard={}", request.skuId(), shardIndex);
                 return tryFallback(request, inventory, shardIndex);
             }
 
-            // 6. 记录使用的分片（用于后续释放时查找）
+            // 5. 记录分片映射（用于 release 时查找）
             redissonClient.getBucket("flashflow:inventory:deduct:shard:" + request.orderSn() + ":" + request.skuId())
                     .set(shardIndex, 300, java.util.concurrent.TimeUnit.SECONDS);
 
-            // 7. 记录日志到 DB
-            recordLog(request.skuId(), shardIndex, request.quantity(),
-                     "DEDUCT", request.orderSn());
+            // 6. 记录日志
+            recordLog(request.skuId(), shardIndex, request.quantity(), "DEDUCT", request.orderSn());
 
             log.info("扣库存成功: skuId={}, shard={}, quantity={}", request.skuId(), shardIndex, request.quantity());
             return new DeductResult(true, shardIndex, getShardStock(request.skuId(), shardIndex));
@@ -135,23 +123,15 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Override
     public boolean release(Long skuId, int quantity, String orderSn) {
-        // 查找原扣减的分片（优先从 Redis 记录中恢复）
         int shardIndex = findDeductedShard(skuId, orderSn);
         String stockKey = "stock:" + skuId + ":" + shardIndex;
         String lockKey = "lock:stock:" + skuId + ":" + shardIndex;
 
         RLock lock = redissonClient.getLock(lockKey);
-        String releaseScript = ScriptUtil.load(SCRIPT_RELEASE);
-
         try {
             lock.lock(3, java.util.concurrent.TimeUnit.SECONDS);
-            redissonClient.getScript().eval(
-                    RScript.Mode.READ_WRITE,
-                    releaseScript,
-                    RScript.ReturnType.INTEGER,
-                    Collections.singletonList(stockKey),
-                    String.valueOf(quantity)
-            );
+            RAtomicLong stockCounter = redissonClient.getAtomicLong(stockKey);
+            stockCounter.addAndGet(quantity);
             recordLog(skuId, shardIndex, -quantity, "RELEASE", orderSn);
             log.info("释放库存: skuId={}, shard={}, quantity={}", skuId, shardIndex, quantity);
             return true;
@@ -205,24 +185,22 @@ public class InventoryServiceImpl implements InventoryService {
         List<InventoryShard> shards = inventoryShardMapper.selectBySkuId(skuId);
         for (InventoryShard shard : shards) {
             String key = "stock:" + skuId + ":" + shard.getShardIndex();
-            // 必须存 String — Lua 脚本用 GET 读取，Kryo 序列化的 Integer 是二进制乱码
-            redissonClient.getBucket(key).set(String.valueOf(shard.getShardStock()));
+            RAtomicLong stockCounter = redissonClient.getAtomicLong(key);
+            stockCounter.set(shard.getShardStock());
         }
         log.info("Redis 预热完成: skuId={}, 分片数={}", skuId, shards.size());
     }
 
     // ========== 私有方法 ==========
 
-    /**
-     * 懒加载 Redis 分片库存：分布式锁防止并发时多线程同时从 DB 回灌。
-     */
+    /** 懒加载 Redis 分片库存 */
     private void ensureRedisWarmed(Long skuId, String targetStockKey) {
-        if (redissonClient.getBucket(targetStockKey).isExists()) return;
+        if (redissonClient.getAtomicLong(targetStockKey).isExists()) return;
         RLock warmLock = redissonClient.getLock("lock:warmup:" + skuId);
         try {
             if (warmLock.tryLock(3, 5, java.util.concurrent.TimeUnit.SECONDS)) {
                 try {
-                    if (redissonClient.getBucket(targetStockKey).isExists()) return; // 双重检查
+                    if (redissonClient.getAtomicLong(targetStockKey).isExists()) return;
                     warmUp(skuId);
                     log.info("懒加载 Redis 分片完成: skuId={}", skuId);
                 } finally {
@@ -249,23 +227,26 @@ public class InventoryServiceImpl implements InventoryService {
             try {
                 if (lock.tryLock(500, 1000, java.util.concurrent.TimeUnit.MILLISECONDS)) {
                     try {
-                        // 直接走 Lua 原子扣减，返回值 1=成功 0=失败，避免 GET 预检 TOCTOU
-                        Long result = redissonClient.getScript().eval(
-                                RScript.Mode.READ_WRITE,
-                                ScriptUtil.load(SCRIPT_DEDUCT),
-                                RScript.ReturnType.INTEGER,
-                                Collections.singletonList(fallbackKey),
-                                String.valueOf(request.quantity()));
-                        if (result != null && result == 1) {
-                            recordLog(request.skuId(), shardIndex, request.quantity(),
-                                    "DEDUCT", request.orderSn());
-                            log.info("Fallback 扣库存成功: skuId={}, shard={}", request.skuId(), shardIndex);
-                            return new DeductResult(true, shardIndex, getShardStock(request.skuId(), shardIndex));
+                        RAtomicLong stockCounter = redissonClient.getAtomicLong(fallbackKey);
+                        if (!stockCounter.isExists()) continue;
+                        long afterStock = stockCounter.addAndGet(-request.quantity());
+                        if (afterStock < 0) {
+                            stockCounter.addAndGet(request.quantity());
+                            continue;
                         }
+                        // 更新分片映射
+                        redissonClient.getBucket("flashflow:inventory:deduct:shard:" + request.orderSn() + ":" + request.skuId())
+                                .set(shardIndex, 300, java.util.concurrent.TimeUnit.SECONDS);
+                        recordLog(request.skuId(), shardIndex, request.quantity(), "DEDUCT", request.orderSn());
+                        log.info("Fallback 扣库存成功: skuId={}, shard={}", request.skuId(), shardIndex);
+                        return new DeductResult(true, shardIndex, getShardStock(request.skuId(), shardIndex));
                     } finally {
                         lock.unlock();
                     }
                 }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Fallback shard {} 被中断", shardIndex);
             } catch (Exception e) {
                 log.warn("Fallback shard {} 失败", shardIndex, e);
             }
@@ -273,7 +254,7 @@ public class InventoryServiceImpl implements InventoryService {
         throw new BusinessException(ErrorCode.STOCK_NOT_ENOUGH);
     }
 
-    /** 记录库存变动日志（含真实库存值，审计可追溯） */
+    /** 记录库存变动日志 */
     private void recordLog(Long skuId, int shardIndex, int quantity, String type, String orderSn) {
         try {
             String stockKey = "stock:" + skuId + ":" + shardIndex;
@@ -284,32 +265,30 @@ public class InventoryServiceImpl implements InventoryService {
             log.setType(type);
             log.setOrderSn(orderSn);
 
-            // 从 Redis 读取真实库存值
-            Object val = redissonClient.getBucket(stockKey).get();
-            int currentStock = val instanceof Number ? ((Number) val).intValue() : 0;
+            RAtomicLong stockCounter = redissonClient.getAtomicLong(stockKey);
+            int currentStock = (int) stockCounter.get();
             if ("DEDUCT".equals(type)) {
-                log.setBeforeStock(currentStock + quantity); // 扣减前 = 当前 + 扣减量
-                log.setAfterStock(currentStock);              // 扣减后 = 当前
+                log.setBeforeStock(currentStock + quantity);
+                log.setAfterStock(currentStock);
             } else if ("RELEASE".equals(type)) {
-                log.setBeforeStock(currentStock - Math.abs(quantity)); // 释放前
-                log.setAfterStock(currentStock);                       // 释放后
+                log.setBeforeStock(currentStock - Math.abs(quantity));
+                log.setAfterStock(currentStock);
             } else {
                 log.setBeforeStock(currentStock);
                 log.setAfterStock(currentStock);
             }
             inventoryLogMapper.insert(log);
         } catch (Exception e) {
-            log.error("记录库存日志失败: ", e); // 日志不影响主流程
+            log.error("记录库存日志失败: ", e);
         }
     }
 
     /** 获取 Redis 中某个分片的当前库存 */
     private int getShardStock(Long skuId, int shardIndex) {
-        Object val = redissonClient.getBucket("stock:" + skuId + ":" + shardIndex).get();
-        return val instanceof Number ? ((Number) val).intValue() : -1;
+        return (int) redissonClient.getAtomicLong("stock:" + skuId + ":" + shardIndex).get();
     }
 
-    /** 查找扣减时使用的分片索引（优先从 Redis 记录恢复） */
+    /** 查找扣减时使用的分片索引 */
     private int findDeductedShard(Long skuId, String orderSn) {
         String mappingKey = "flashflow:inventory:deduct:shard:" + orderSn + ":" + skuId;
         Object val = redissonClient.getBucket(mappingKey).get();
@@ -323,7 +302,6 @@ public class InventoryServiceImpl implements InventoryService {
                 return shard.getShardIndex();
             }
         }
-        // 最终默认分片0
         return 0;
     }
 }

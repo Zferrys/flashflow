@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS user_coupon (
   `order_sn`    varchar(32) DEFAULT NULL COMMENT '关联订单号',
   `get_time`    datetime   NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '领取时间',
   PRIMARY KEY (`id`),
-  KEY `idx_user` (`user_id`),
+  UNIQUE KEY `uk_user_coupon` (`user_id`, `coupon_id`),
   KEY `idx_coupon` (`coupon_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户优惠券';
 

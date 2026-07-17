@@ -52,16 +52,24 @@ public class OrderController {
         }
     }
 
-    @Operation(summary = "订单详情")
+    @Operation(summary = "订单详情（校验所有权）")
     @GetMapping("/{id}")
     public R<OrderInfo> getById(@PathVariable Long id) {
-        return R.ok(orderService.getById(id));
+        OrderInfo order = orderService.getById(id);
+        if (!UserContext.isAdmin() && !order.getUserId().equals(UserContext.getUserId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权查看他人订单");
+        }
+        return R.ok(order);
     }
 
-    @Operation(summary = "按订单号查询")
+    @Operation(summary = "按订单号查询（校验所有权）")
     @GetMapping("/orderSn/{orderSn}")
     public R<OrderInfo> getByOrderSn(@PathVariable String orderSn) {
-        return R.ok(orderService.getByOrderSn(orderSn));
+        OrderInfo order = orderService.getByOrderSn(orderSn);
+        if (!UserContext.isAdmin() && !order.getUserId().equals(UserContext.getUserId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权查看他人订单");
+        }
+        return R.ok(order);
     }
 
     @Operation(summary = "订单分页")
@@ -72,15 +80,23 @@ public class OrderController {
         return R.ok(orderService.page(new Page<>(page, size), UserContext.getUserId(), status));
     }
 
-    @Operation(summary = "订单商品明细")
+    @Operation(summary = "订单商品明细（校验所有权）")
     @GetMapping("/{id}/items")
     public R<List<OrderItem>> getItems(@PathVariable Long id) {
+        OrderInfo order = orderService.getById(id);
+        if (!UserContext.isAdmin() && !order.getUserId().equals(UserContext.getUserId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权查看他人订单明细");
+        }
         return R.ok(orderService.getItems(id));
     }
 
-    @Operation(summary = "订单事件流水（Event Sourcing）")
+    @Operation(summary = "订单事件流水/Event Sourcing（校验所有权）")
     @GetMapping("/{id}/events")
     public R<List<OrderEvent>> getEvents(@PathVariable Long id) {
+        OrderInfo order = orderService.getById(id);
+        if (!UserContext.isAdmin() && !order.getUserId().equals(UserContext.getUserId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "无权查看他人订单事件");
+        }
         return R.ok(orderService.getEvents(id));
     }
 

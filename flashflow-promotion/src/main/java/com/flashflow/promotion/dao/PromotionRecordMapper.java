@@ -5,6 +5,8 @@ import com.flashflow.promotion.entity.PromotionRecord;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+
 /**
  * 参与记录 Mapper
  */
@@ -15,4 +17,7 @@ public interface PromotionRecordMapper extends BaseMapper<PromotionRecord> {
 
     @Select("SELECT COALESCE(SUM(quantity), 0) FROM promotion_record WHERE user_id = #{userId} AND activity_id = #{activityId} AND sku_id = #{skuId}")
     int sumQuantityByUserAndSku(@Param("userId") Long userId, @Param("activityId") Long activityId, @Param("skuId") Long skuId);
+
+    @Select("SELECT * FROM promotion_record WHERE user_id = #{userId} AND sku_id = #{skuId}")
+    List<PromotionRecord> selectByUserAndSku(@Param("userId") Long userId, @Param("skuId") Long skuId);
 }

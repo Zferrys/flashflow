@@ -43,7 +43,7 @@ public class OrderEventConsumer {
     }
 
     @RabbitHandler
-    @RabbitListener(queues = "queue.inventory.deduct", ackMode = "MANUAL", concurrency = "5-10")
+    @RabbitListener(queues = "queue.inventory.deduct", containerFactory = "inventoryListenerContainerFactory", concurrency = "5-10")
     public void handleOrderCreated(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         String messageId = rawMessage.getMessageProperties().getMessageId();
         long deliveryTag = rawMessage.getMessageProperties().getDeliveryTag();
@@ -80,7 +80,7 @@ public class OrderEventConsumer {
      * 监听队列 queue.inventory.release，绑定路由键 order.cancelled / order.refunded
      */
     @RabbitHandler
-    @RabbitListener(queues = "queue.inventory.release", ackMode = "MANUAL", concurrency = "3-5")
+    @RabbitListener(queues = "queue.inventory.release", containerFactory = "inventoryListenerContainerFactory", concurrency = "3-5")
     public void handleOrderCancelled(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         String messageId = rawMessage.getMessageProperties().getMessageId();
         long deliveryTag = rawMessage.getMessageProperties().getDeliveryTag();
@@ -112,7 +112,7 @@ public class OrderEventConsumer {
     }
 
     @RabbitHandler
-    @RabbitListener(queues = "queue.inventory.confirm", ackMode = "MANUAL", concurrency = "3-5")
+    @RabbitListener(queues = "queue.inventory.confirm", containerFactory = "inventoryListenerContainerFactory", concurrency = "3-5")
     public void handleOrderPaid(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         String messageId = rawMessage.getMessageProperties().getMessageId();
         long deliveryTag = rawMessage.getMessageProperties().getDeliveryTag();
@@ -133,7 +133,7 @@ public class OrderEventConsumer {
      * 监听队列 queue.inventory.release，路由键 order.refunded
      */
     @RabbitHandler
-    @RabbitListener(queues = "queue.inventory.release", ackMode = "MANUAL", concurrency = "3-5")
+    @RabbitListener(queues = "queue.inventory.release", containerFactory = "inventoryListenerContainerFactory", concurrency = "3-5")
     public void handleOrderRefunded(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         // 委托给统一释放处理器
         handleOrderCancelled(message, channel, rawMessage);

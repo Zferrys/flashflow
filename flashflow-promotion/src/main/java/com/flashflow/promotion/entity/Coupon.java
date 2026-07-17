@@ -23,6 +23,9 @@ public class Coupon {
     private String scope;
     /** 范围值: 分类ID 或 SKU ID JSON数组 */
     private String scopeValue;
+    /** 适用SKU_ID（预留，未在DB建列，使用 exist=false 避免查询报错） */
+    @TableField(exist = false)
+    private Long scopeSkuId;
     /** 自动发放: NONE=手动领取, NEW_USER=新用户, FIRST_ORDER=首单 */
     private String autoGrant;
     @TableField(fill = FieldFill.INSERT)

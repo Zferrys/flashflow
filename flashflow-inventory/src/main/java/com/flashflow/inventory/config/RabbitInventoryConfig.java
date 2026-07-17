@@ -1,6 +1,8 @@
 package com.flashflow.inventory.config;
 
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -16,6 +18,13 @@ public class RabbitInventoryConfig {
     public static final String QUEUE_DEDUCT        = "queue.inventory.deduct";
     public static final String QUEUE_RELEASE       = "queue.inventory.release";
     public static final String QUEUE_CONFIRM       = "queue.inventory.confirm";
+
+    /** 死信交换机 + 死信队列（通过 RabbitMQ policy 绑定到主队列） */
+    private static final String DLX_EXCHANGE = "exchange.order.dlx";
+    static final String DLQ_DEDUCT  = "queue.inventory.deduct.dlq";
+    static final String DLQ_RELEASE = "queue.inventory.release.dlq";
+    static final String DLQ_CONFIRM = "queue.inventory.confirm.dlq";
+
     public static final String RK_ORDER_CREATED    = "order.created";
     public static final String RK_ORDER_CANCELLED  = "order.cancelled";
     public static final String RK_ORDER_PAID       = "order.paid";
@@ -27,20 +36,33 @@ public class RabbitInventoryConfig {
         return new TopicExchange(EXCHANGE_ORDER, true, false);
     }
 
+    /** 死信交换机 */
     @Bean
-    public Queue deductQueue() {
-        return QueueBuilder.durable(QUEUE_DEDUCT).build();
+    public TopicExchange inventoryDlxExchange() {
+        return new TopicExchange(DLX_EXCHANGE, true, false);
     }
 
     @Bean
-    public Queue releaseQueue() {
-        return QueueBuilder.durable(QUEUE_RELEASE).build();
-    }
+    public Queue deductQueue()  { return QueueBuilder.durable(QUEUE_DEDUCT).build(); }
+    @Bean
+    public Queue releaseQueue() { return QueueBuilder.durable(QUEUE_RELEASE).build(); }
+    @Bean
+    public Queue confirmQueue() { return QueueBuilder.durable(QUEUE_CONFIRM).build(); }
+
+    /** 死信队列 — 消息超限后进入，可人工处理/告警 */
+    @Bean
+    public Queue dlqDeductQueue()  { return QueueBuilder.durable(DLQ_DEDUCT).build(); }
+    @Bean
+    public Queue dlqReleaseQueue() { return QueueBuilder.durable(DLQ_RELEASE).build(); }
+    @Bean
+    public Queue dlqConfirmQueue() { return QueueBuilder.durable(DLQ_CONFIRM).build(); }
 
     @Bean
-    public Queue confirmQueue() {
-        return QueueBuilder.durable(QUEUE_CONFIRM).build();
-    }
+    public Binding dlqDeductBinding()  { return BindingBuilder.bind(dlqDeductQueue()).to(inventoryDlxExchange()).with("dlq.deduct"); }
+    @Bean
+    public Binding dlqReleaseBinding() { return BindingBuilder.bind(dlqReleaseQueue()).to(inventoryDlxExchange()).with("dlq.release"); }
+    @Bean
+    public Binding dlqConfirmBinding() { return BindingBuilder.bind(dlqConfirmQueue()).to(inventoryDlxExchange()).with("dlq.confirm"); }
 
     @Bean
     public Binding deductBinding() {
@@ -64,5 +86,16 @@ public class RabbitInventoryConfig {
     public Binding confirmBinding() {
         return BindingBuilder.bind(confirmQueue())
                 .to(inventoryOrderExchange()).with(RK_ORDER_PAID);
+    }
+
+    /** 消费者容器工厂：prefetch=10 防止无限拉取导致 OOM，手动 ACK 保证可靠消费 */
+    @Bean("inventoryListenerContainerFactory")
+    public SimpleRabbitListenerContainerFactory inventoryListenerContainerFactory(ConnectionFactory connectionFactory) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setPrefetchCount(10);
+        factory.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        factory.setDefaultRequeueRejected(false); // 不重新入队，去死信队列
+        return factory;
     }
 }

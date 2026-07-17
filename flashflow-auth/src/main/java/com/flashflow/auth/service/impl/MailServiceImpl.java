@@ -38,10 +38,10 @@ public class MailServiceImpl implements MailService {
         // 使用 SecureRandom 生成6位验证码（防预测）
         String code = String.format("%06d", SECURE_RANDOM.nextInt(1000000));
 
-        // 开发模式：未配置 SMTP 时，验证码打印到日志（方便本地调试）
+        // 开发模式：未配置 SMTP 时，验证码打印到日志（掩码输出，防泄露）
         if (fromEmail == null || fromEmail.isEmpty()) {
             log.warn("⚠️ SMTP 未配置（请设置环境变量 SMTP_USERNAME / SMTP_PASSWORD），验证码已打印到日志");
-            log.info("📧 验证码 [{}] → email={}", code, email);
+            log.info("📧 验证码 [{}{}****] → email={}", code.charAt(0), code.charAt(1), email);
             EmailVerify ev = new EmailVerify();
             ev.setEmail(email);
             ev.setCode(passwordEncoder.encode(code));

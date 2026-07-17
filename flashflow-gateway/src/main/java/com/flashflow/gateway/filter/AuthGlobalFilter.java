@@ -111,8 +111,15 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     @Override public int getOrder() { return -100; }
 
+    /** 白名单路径匹配：精确匹配 或 前缀匹配（仅限以 /** 结尾的路径） */
     private boolean isWhiteListed(String path) {
-        return whiteList.stream().anyMatch(path::startsWith);
+        return whiteList.stream().anyMatch(pattern -> {
+            if (pattern.endsWith("/**")) {
+                String prefix = pattern.substring(0, pattern.length() - 3);
+                return path.startsWith(prefix);
+            }
+            return path.equals(pattern) || path.startsWith(pattern + "/");
+        });
     }
 
     private String extractToken(ServerHttpRequest request) {

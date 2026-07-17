@@ -23,7 +23,7 @@ public class JwtTokenProvider {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${jwt.access-token-expiration:604800000}") // 默认 7 天
+    @Value("${jwt.access-token-expiration:1800000}") // 默认 30 分钟（生产应 ≤15 分钟）
     private long accessTokenExpiration;
 
     @Value("${jwt.refresh-token-expiration:2592000000}") // 默认 30 天
@@ -53,12 +53,14 @@ public class JwtTokenProvider {
     }
 
     /**
-     * 生成 RefreshToken
+     * 生成 RefreshToken（包含 username + role，供 /refresh 端点解析后签发新 AccessToken）
      */
-    public String generateRefreshToken(Long userId) {
+    public String generateRefreshToken(Long userId, String username, String roleCode) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
+                .claim("username", username)
+                .claim("role", roleCode)
                 .claim("type", "refresh")
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + refreshTokenExpiration))
@@ -116,6 +118,13 @@ public class JwtTokenProvider {
      */
     public Date getExpirationFromToken(String token) {
         return parseToken(token).getExpiration();
+    }
+
+    /**
+     * 获取 AccessToken 有效期（毫秒），供 LoginResponse 使用
+     */
+    public long getAccessTokenExpiration() {
+        return accessTokenExpiration;
     }
 
     private Claims parseToken(String token) {

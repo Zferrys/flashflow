@@ -23,12 +23,14 @@ public class RabbitMQJsonConfig {
         return t;
     }
 
+    /** 消费者容器工厂：prefetch=10 防OOM，手动ACK + Jackson 消息转换 */
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             ConnectionFactory cf, SimpleRabbitListenerContainerFactoryConfigurer cfg, Jackson2JsonMessageConverter c) {
         SimpleRabbitListenerContainerFactory f = new SimpleRabbitListenerContainerFactory();
         cfg.configure(f, cf);
         f.setMessageConverter(c);
+        f.setPrefetchCount(10);
         f.setDefaultRequeueRejected(false);
         return f;
     }

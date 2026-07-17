@@ -39,7 +39,7 @@ public class PaymentEventConsumer {
     private static final long MAX_RETRY = 3;
 
     @RabbitHandler
-    @RabbitListener(queues = "queue.order.paid", ackMode = "MANUAL", concurrency = "5-10")
+    @RabbitListener(queues = "queue.order.paid", containerFactory = "rabbitListenerContainerFactory", concurrency = "5-10")
     public void handlePaymentSuccess(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         AckContext ctx = begin(message, channel, rawMessage);
         if (ctx.skip()) return;
@@ -57,7 +57,7 @@ public class PaymentEventConsumer {
     }
 
     @RabbitHandler
-    @RabbitListener(queues = "queue.order.refund.success", ackMode = "MANUAL", concurrency = "3-5")
+    @RabbitListener(queues = "queue.order.refund.success", containerFactory = "rabbitListenerContainerFactory", concurrency = "3-5")
     public void handleRefundSuccess(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         AckContext ctx = begin(message, channel, rawMessage);
         if (ctx.skip()) return;
@@ -78,7 +78,7 @@ public class PaymentEventConsumer {
     }
 
     @RabbitHandler
-    @RabbitListener(queues = "queue.order.payment.fail", ackMode = "MANUAL", concurrency = "3-5")
+    @RabbitListener(queues = "queue.order.payment.fail", containerFactory = "rabbitListenerContainerFactory", concurrency = "3-5")
     public void handlePaymentFail(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         AckContext ctx = begin(message, channel, rawMessage);
         if (ctx.skip()) return;

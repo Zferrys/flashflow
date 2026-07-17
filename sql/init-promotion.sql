@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS promotion_activity (
   KEY `idx_type` (`activity_type`),
   KEY `idx_status` (`status`),
   KEY `idx_start_time` (`start_time`),
-  KEY `idx_end_time` (`end_time`)
+  KEY `idx_end_time` (`end_time`),
   KEY `idx_status_time` (`status`, `start_time`, `end_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='营销活动';
 

@@ -36,6 +36,13 @@ public class RabbitOrderConfig {
         return new TopicExchange(EXCHANGE_PAYMENT, true, false);
     }
 
+    // 死信队列（用于人工处理/告警）—— 需在 RabbitMQ 侧配置 policy 绑定到主队列:
+    //   rabbitmqctl set_policy DLX "queue\\.order\\." '{"dead-letter-exchange":"exchange.order.dlx"}' --apply-to queues
+    private static final String DLX_ORDER = "exchange.order.dlx";
+    static final String DLQ_PAID   = "queue.order.paid.dlq";
+    static final String DLQ_FAILED = "queue.order.payment.fail.dlq";
+    static final String DLQ_REFUND = "queue.order.refund.success.dlq";
+
     // ========== 队列 ==========
 
     @Bean
@@ -52,6 +59,13 @@ public class RabbitOrderConfig {
     public Queue refundQueue() {
         return QueueBuilder.durable(QUEUE_REFUND).build();
     }
+
+    /** 死信交换机 + 死信队列（声明后通过 RabbitMQ policy 绑定） */
+    @Bean
+    public TopicExchange orderDlxExchange() { return new TopicExchange(DLX_ORDER, true, false); }
+    @Bean public Queue dlqPaidQueue()   { return QueueBuilder.durable(DLQ_PAID).build(); }
+    @Bean public Queue dlqFailedQueue() { return QueueBuilder.durable(DLQ_FAILED).build(); }
+    @Bean public Queue dlqRefundQueue() { return QueueBuilder.durable(DLQ_REFUND).build(); }
 
     // ========== 绑定 ==========
 

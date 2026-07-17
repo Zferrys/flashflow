@@ -44,6 +44,9 @@ public interface PromotionService {
     // ========== 秒杀参与 ==========
     FlashSaleResult flashSale(FlashSaleRequest request);
 
+    /** 释放秒杀限购 + 删除参与记录（订单取消/退款时回调，按用户+SKU匹配） */
+    void releaseBuyLimit(Long userId, Long skuId);
+
     record FlashSaleRequest(Long activityId, Long skuId, Long userId, int quantity) {}
     record FlashSaleResult(boolean success, String message, String orderSn) {}
 }

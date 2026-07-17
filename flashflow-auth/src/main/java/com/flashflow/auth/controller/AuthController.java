@@ -44,10 +44,13 @@ public class AuthController {
     private final RedissonClient redissonClient;
 
     /**
-     * 管理员登录
+     * 管理员登录（含 IP 限流：60秒内最多 5 次）
      */
+    @OperLog(module = "认证", operation = "管理员登录")
     @PostMapping("/login")
-    public R<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+    public R<LoginResponse> login(@Valid @RequestBody LoginRequest request,
+                                   HttpServletRequest httpRequest) {
+        rateLimitIP(httpRequest, "admin-login", 20, 60);
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getAccount(), request.getPassword())
@@ -57,7 +60,8 @@ public class AuthController {
 
             String accessToken = jwtTokenProvider.generateAccessToken(
                     loginUser.getId(), loginUser.getUsername(), loginUser.getRoleCode());
-            String refreshToken = jwtTokenProvider.generateRefreshToken(loginUser.getId());
+            String refreshToken = jwtTokenProvider.generateRefreshToken(
+                    loginUser.getId(), loginUser.getUsername(), loginUser.getRoleCode());
 
             LoginResponse.UserInfoBrief userInfo = LoginResponse.UserInfoBrief.builder()
                     .id(loginUser.getId())
@@ -65,11 +69,12 @@ public class AuthController {
                     .roleCode(loginUser.getRoleCode())
                     .build();
 
+            long expiresIn = jwtTokenProvider.getAccessTokenExpiration();
             LoginResponse response = LoginResponse.builder()
                     .accessToken(accessToken)
                     .refreshToken(refreshToken)
                     .tokenType("Bearer")
-                    .expiresIn(604800000L)
+                    .expiresIn(expiresIn)
                     .user(userInfo)
                     .build();
 
@@ -82,6 +87,7 @@ public class AuthController {
     /**
      * 管理员/用户登出（JWT 加入 Redis 黑名单，使 Token 立即失效）
      */
+    @OperLog(module = "认证", operation = "管理员登出")
     @PostMapping("/logout")
     public R<Void> logout(HttpServletRequest request) {
         String token = extractToken(request);
@@ -124,7 +130,7 @@ public class AuthController {
                 .accessToken(newAccessToken)
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
-                .expiresIn(604800000L)
+                .expiresIn(jwtTokenProvider.getAccessTokenExpiration())
                 .build();
         return R.ok(response);
     }

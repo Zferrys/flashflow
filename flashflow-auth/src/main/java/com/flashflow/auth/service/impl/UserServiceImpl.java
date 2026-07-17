@@ -1,5 +1,8 @@
 package com.flashflow.auth.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.flashflow.auth.dao.UserInfoMapper;
 import com.flashflow.auth.dto.LoginRequest;
 import com.flashflow.auth.dto.LoginResponse;
@@ -18,6 +21,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
@@ -38,6 +43,9 @@ public class UserServiceImpl implements UserService {
     private final RedissonClient redissonClient;
     private final MailService mailService;
     private final RestTemplate restTemplate;
+
+    @org.springframework.beans.factory.annotation.Value("${promotion.service.url:http://127.0.0.1:8100/api/flashflow/promotion}")
+    private String promotionBaseUrl;
 
     /** 登录失败锁定：5次/30分钟 */
     private static final int MAX_LOGIN_FAIL = 5;
@@ -71,7 +79,7 @@ public class UserServiceImpl implements UserService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-User-Id", String.valueOf(user.getId()));
             restTemplate.postForObject(
-                    "http://127.0.0.1:8100/api/flashflow/promotion/coupon/auto-grant?grantType=NEW_USER",
+                    promotionBaseUrl + "/coupon/auto-grant?grantType=NEW_USER",
                     new HttpEntity<>(null, headers), String.class);
             log.info("新用户优惠券已发放: userId={}", user.getId());
         } catch (Exception e) {
@@ -112,13 +120,13 @@ public class UserServiceImpl implements UserService {
         userInfoMapper.updateById(user);
 
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), "ROLE_USER");
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), user.getEmail(), "ROLE_USER");
 
         return LoginResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
-                .expiresIn(604800000L)
+                .expiresIn(jwtTokenProvider.getAccessTokenExpiration())
                 .build();
     }
 
@@ -160,5 +168,62 @@ public class UserServiceImpl implements UserService {
         }
         userInfoMapper.updateById(user);
         log.info("用户信息已更新: userId={}", userId);
+    }
+
+    // ========== 管理员用户管理 ==========
+
+    @Override
+    public IPage<UserInfo> pageUsers(Page<UserInfo> page, String keyword) {
+        LambdaQueryWrapper<UserInfo> wrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(UserInfo::getEmail, keyword)
+                   .or().like(UserInfo::getNickname, keyword)
+                   .or().like(UserInfo::getPhone, keyword);
+        }
+        wrapper.orderByDesc(UserInfo::getCreateTime);
+        return userInfoMapper.selectPage(page, wrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void createUser(UserInfo user) {
+        if (StringUtils.hasText(user.getEmail())) {
+            UserInfo exist = userInfoMapper.selectByEmail(user.getEmail());
+            if (exist != null) {
+                throw new BusinessException(ErrorCode.EMAIL_EXISTED);
+            }
+        }
+        if (StringUtils.hasText(user.getPassword())) {
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+        }
+        if (user.getStatus() == null) {
+            user.setStatus(1);
+        }
+        userInfoMapper.insert(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateUser(UserInfo user) {
+        UserInfo exist = userInfoMapper.selectById(user.getId());
+        if (exist == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        if (StringUtils.hasText(user.getPassword())) {
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+        } else {
+            user.setPassword(null); // 不更新密码
+        }
+        userInfoMapper.updateById(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteUser(Long id) {
+        UserInfo exist = userInfoMapper.selectById(id);
+        if (exist == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        userInfoMapper.deleteById(id);
     }
 }

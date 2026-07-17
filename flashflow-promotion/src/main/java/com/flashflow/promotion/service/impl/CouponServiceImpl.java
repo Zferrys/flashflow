@@ -43,7 +43,8 @@ public class CouponServiceImpl implements CouponService {
             }
             if (skuId != null) {
                 w.or(w3 -> w3.eq(Coupon::getScope, "SKU")
-                        .apply("JSON_CONTAINS(scope_value, CONCAT('\"',{0},'\"'))", skuId));
+                        .and(w4 -> w4.eq(Coupon::getScopeSkuId, skuId)
+                                .or().apply("JSON_CONTAINS(scope_value, CONCAT('\"',{0},'\"'))", skuId)));
             }
         });
         return couponMapper.selectList(wrapper);

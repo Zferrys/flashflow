@@ -57,6 +57,9 @@ public class PaymentServiceImpl implements PaymentService {
     @Value("${alipay.gateway:https://openapi-sandbox.dl.alipaydev.com/gateway.do}")
     private String gatewayUrl;
 
+    @Value("${payment.mock-pay.url:http://127.0.0.1:8120/api/flashflow/payment/mock-pay}")
+    private String mockPayUrl;
+
     private AlipayClient alipayClient;
 
     @PostConstruct
@@ -120,7 +123,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private String buildMockPayUrl(PaymentOrder payOrder) {
         log.info("模拟支付: orderSn={}", payOrder.getOrderSn());
-        return "http://127.0.0.1:8120/api/flashflow/payment/mock-pay?orderSn=" + payOrder.getOrderSn();
+        return mockPayUrl + "?orderSn=" + payOrder.getOrderSn();
     }
 
     @Override
