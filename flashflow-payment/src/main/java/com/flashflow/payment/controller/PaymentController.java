@@ -9,6 +9,7 @@ import com.flashflow.payment.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -58,7 +59,8 @@ public class PaymentController {
         return R.ok();
     }
 
-    @Operation(summary = "模拟支付（开发用）")
+    @Operation(summary = "模拟支付（仅开发环境，需登录）")
+    @Profile("dev")
     @PostMapping("/mock-pay")
     public R<String> mockPay(@RequestParam String orderSn, @RequestParam(required = false) BigDecimal amount) {
         // 检查是否已有支付记录

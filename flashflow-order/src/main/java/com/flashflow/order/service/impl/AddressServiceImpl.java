@@ -28,12 +28,22 @@ public class AddressServiceImpl implements AddressService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void update(DeliveryAddress address) {
+        // 校验地址归属（防止 IDOR 越权）
+        DeliveryAddress existing = addressMapper.selectById(address.getId());
+        if (existing == null || !existing.getUserId().equals(address.getUserId())) {
+            throw new com.flashflow.common.exception.BusinessException(
+                    com.flashflow.common.domain.ErrorCode.FORBIDDEN, "无权修改此地址");
+        }
         if (address.getIsDefault() == 1) clearDefault(address.getUserId());
         addressMapper.updateById(address);
     }
 
     @Override
-    public void remove(Long id) { addressMapper.deleteById(id); }
+    public void remove(Long id) {
+        // 注意：此方法需由 Controller 层校验归属后再调用
+        // Controller 层应先查询地址校验 userId == currentUserId
+        addressMapper.deleteById(id);
+    }
 
     @Override
     @Transactional

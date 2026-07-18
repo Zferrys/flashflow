@@ -80,7 +80,7 @@ public class InventoryServiceImpl implements InventoryService {
         RLock lock = redissonClient.getLock(lockKey);
         boolean locked = false;
         try {
-            locked = lock.tryLock(1, 3, java.util.concurrent.TimeUnit.SECONDS);
+            locked = lock.tryLock(2, 10, java.util.concurrent.TimeUnit.SECONDS);
             if (!locked) {
                 log.warn("获取库存锁失败: skuId={}, shard={}", request.skuId(), shardIndex);
                 throw new BusinessException(ErrorCode.STOCK_LOCK_FAILED);
@@ -128,8 +128,13 @@ public class InventoryServiceImpl implements InventoryService {
         String lockKey = "lock:stock:" + skuId + ":" + shardIndex;
 
         RLock lock = redissonClient.getLock(lockKey);
+        boolean locked = false;
         try {
-            lock.lock(3, java.util.concurrent.TimeUnit.SECONDS);
+            locked = lock.tryLock(2, 10, java.util.concurrent.TimeUnit.SECONDS);
+            if (!locked) {
+                log.warn("释放库存获取锁超时: skuId={}, shard={}", skuId, shardIndex);
+                return false;
+            }
             RAtomicLong stockCounter = redissonClient.getAtomicLong(stockKey);
             stockCounter.addAndGet(quantity);
             recordLog(skuId, shardIndex, -quantity, "RELEASE", orderSn);
@@ -139,7 +144,7 @@ public class InventoryServiceImpl implements InventoryService {
             log.error("释放库存异常: ", e);
             return false;
         } finally {
-            if (lock.isHeldByCurrentThread()) {
+            if (locked && lock.isHeldByCurrentThread()) {
                 lock.unlock();
             }
         }

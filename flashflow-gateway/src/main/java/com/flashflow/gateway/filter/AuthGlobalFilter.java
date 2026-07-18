@@ -68,7 +68,9 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
-        if (isWhiteListed(path)) return chain.filter(exchange);
+        String method = exchange.getRequest().getMethod() != null
+                ? exchange.getRequest().getMethod().name() : "GET";
+        if (isWhiteListed(path, method)) return chain.filter(exchange);
 
         String token = extractToken(exchange.getRequest());
         if (!StringUtils.hasText(token)) return unauthorized(exchange, "Missing Authorization header");
@@ -79,30 +81,27 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
                     .parseSignedClaims(token).getPayload();
 
             // JWT 黑名单检查（登出后 Token 立即失效）
-            // Redis 不可用时（如 dev 环境未启动 Redis）降级跳过黑名单检查
+            // 使用反应式链避免阻塞 WebFlux 事件循环
             String jti = claims.getId();
             if (jti != null && !jti.isEmpty() && redissonClient != null) {
-                try {
-                    Boolean blacklisted = Mono.fromCallable(() ->
-                            redissonClient.getBucket(BLACKLIST_PREFIX + jti).isExists())
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .block(Duration.ofSeconds(2));
-                    if (Boolean.TRUE.equals(blacklisted)) {
-                        log.warn("Token 已被吊销: jti={}", jti);
-                        return unauthorized(exchange, "Token has been revoked");
-                    }
-                } catch (Exception redisEx) {
-                    log.warn("Redis 黑名单查询失败，降级放行: jti={}, error={}", jti, redisEx.getMessage());
-                }
+                return Mono.fromCallable(() ->
+                        redissonClient.getBucket(BLACKLIST_PREFIX + jti).isExists())
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .timeout(Duration.ofSeconds(2))
+                        .onErrorResume(e -> {
+                            log.warn("Redis 黑名单查询失败，降级放行: jti={}, error={}", jti, e.getMessage());
+                            return Mono.just(false);
+                        })
+                        .flatMap(blacklisted -> {
+                            if (Boolean.TRUE.equals(blacklisted)) {
+                                log.warn("Token 已被吊销: jti={}", jti);
+                                return unauthorized(exchange, "Token has been revoked");
+                            }
+                            return forwardWithUserHeaders(exchange, chain, claims, token);
+                        });
             }
 
-            ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
-                    .header("X-User-Id", claims.getSubject())
-                    .header("X-User-Name", claims.get("username", String.class))
-                    .header("X-User-Role", claims.get("role", String.class))
-                    .header("Authorization", "Bearer " + token)
-                    .build();
-            return chain.filter(exchange.mutate().request(modifiedRequest).build());
+            return forwardWithUserHeaders(exchange, chain, claims, token);
         } catch (Exception e) {
             log.warn("JWT validation failed: {}", e.getMessage());
             return unauthorized(exchange, "Invalid or expired token");
@@ -111,13 +110,26 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     @Override public int getOrder() { return -100; }
 
-    /** 白名单路径匹配：精确匹配 或 前缀匹配（仅限以 /** 结尾的路径） */
-    private boolean isWhiteListed(String path) {
+    /**
+     * 白名单路径匹配。
+     * 格式：
+     *   - "GET:/path"  → 仅 GET 请求匹配（用于公开浏览接口）
+     *   - "/path"       → 所有方法匹配（用于登录/回调等）
+     *   - "/path/**"    → 前缀匹配所有子路径
+     */
+    private boolean isWhiteListed(String path, String method) {
         return whiteList.stream().anyMatch(pattern -> {
+            // 方法限定匹配：GET:/path 格式
+            if (pattern.startsWith("GET:")) {
+                if (!"GET".equalsIgnoreCase(method)) return false;
+                pattern = pattern.substring(4); // 去掉 "GET:" 前缀
+            }
+            // 前缀匹配
             if (pattern.endsWith("/**")) {
                 String prefix = pattern.substring(0, pattern.length() - 3);
                 return path.startsWith(prefix);
             }
+            // 精确匹配 + 子路径匹配
             return path.equals(pattern) || path.startsWith(pattern + "/");
         });
     }
@@ -126,6 +138,18 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         String bearer = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (StringUtils.hasText(bearer) && bearer.startsWith("Bearer ")) return bearer.substring(7);
         return null;
+    }
+
+    /** 将用户信息写入 Header 并转发请求 */
+    private Mono<Void> forwardWithUserHeaders(ServerWebExchange exchange, GatewayFilterChain chain,
+                                               Claims claims, String token) {
+        ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
+                .header("X-User-Id", claims.getSubject())
+                .header("X-User-Name", claims.get("username", String.class))
+                .header("X-User-Role", claims.get("role", String.class))
+                .header("Authorization", "Bearer " + token)
+                .build();
+        return chain.filter(exchange.mutate().request(modifiedRequest).build());
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange, String msg) {

@@ -11,6 +11,7 @@ import com.flashflow.promotion.entity.PromotionSku;
 import com.flashflow.promotion.service.PromotionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -46,7 +47,7 @@ public class PromotionController {
 
     @Operation(summary = "创建活动")
     @PostMapping("/activity")
-    public R<Void> create(@RequestBody PromotionActivity activity) {
+    public R<Void> create(@Valid @RequestBody PromotionActivity activity) {
         requireAdmin();
         promotionService.createActivity(activity);
         return R.ok();
@@ -60,7 +61,7 @@ public class PromotionController {
 
     @Operation(summary = "修改活动")
     @PutMapping("/activity")
-    public R<Void> update(@RequestBody PromotionActivity activity) {
+    public R<Void> update(@Valid @RequestBody PromotionActivity activity) {
         requireAdmin();
         promotionService.updateActivity(activity);
         return R.ok();
@@ -94,7 +95,7 @@ public class PromotionController {
 
     @Operation(summary = "添加活动商品")
     @PostMapping("/activity/{id}/sku")
-    public R<Void> addSku(@PathVariable Long id, @RequestBody PromotionSku sku) {
+    public R<Void> addSku(@PathVariable Long id, @Valid @RequestBody PromotionSku sku) {
         requireAdmin();
         sku.setActivityId(id);
         promotionService.addSku(sku);
@@ -103,7 +104,7 @@ public class PromotionController {
 
     @Operation(summary = "修改活动商品")
     @PutMapping("/activity/{id}/sku")
-    public R<Void> updateSku(@PathVariable Long id, @RequestBody PromotionSku sku) {
+    public R<Void> updateSku(@PathVariable Long id, @Valid @RequestBody PromotionSku sku) {
         requireAdmin();
         sku.setActivityId(id);
         promotionService.updateSku(sku);

@@ -43,13 +43,21 @@ public class InventoryController {
         return R.ok(inventoryService.getShards(skuId));
     }
 
-    @Operation(summary = "扣库存（Redisson 锁 + Lua）")
+    /**
+     * 扣库存（内部接口，由 MQ 消费者直接调用 Service，不走 HTTP）
+     * @deprecated 生产环境调用请走 MQ 消息队列；HTTP 端点仅保留用于调试
+     */
+    @Operation(summary = "扣库存（内部接口，MQ消费者请直接调 Service）")
     @PostMapping("/deduct")
     public R<InventoryService.DeductResult> deduct(@RequestBody InventoryService.DeductRequest request) {
         return R.ok(inventoryService.deduct(request));
     }
 
-    @Operation(summary = "释放预扣库存")
+    /**
+     * 释放预扣库存（内部接口，由 MQ 消费者直接调用 Service，不走 HTTP）
+     * @deprecated 生产环境调用请走 MQ 消息队列；HTTP 端点仅保留用于调试
+     */
+    @Operation(summary = "释放预扣库存（内部接口，MQ消费者请直接调 Service）")
     @PostMapping("/release")
     public R<Boolean> release(@RequestBody ReleaseRequest request) {
         return R.ok(inventoryService.release(request.skuId(), request.quantity(), request.orderSn()));

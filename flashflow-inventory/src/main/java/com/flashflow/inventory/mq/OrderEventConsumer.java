@@ -43,7 +43,7 @@ public class OrderEventConsumer {
     }
 
     @RabbitHandler
-    @RabbitListener(queues = "queue.inventory.deduct", containerFactory = "inventoryListenerContainerFactory", concurrency = "5-10")
+    @RabbitListener(queues = "queue.inventory.deduct", containerFactory = "inventoryListenerContainerFactory", concurrency = "15-30")
     public void handleOrderCreated(Map<String, Object> message, Channel channel, Message rawMessage) throws IOException {
         String messageId = rawMessage.getMessageProperties().getMessageId();
         long deliveryTag = rawMessage.getMessageProperties().getDeliveryTag();

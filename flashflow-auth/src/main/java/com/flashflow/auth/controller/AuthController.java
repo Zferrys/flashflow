@@ -43,20 +43,37 @@ public class AuthController {
     private final MailService mailService;
     private final RedissonClient redissonClient;
 
+    /** 管理员登录失败最大次数 */
+    private static final int ADMIN_MAX_LOGIN_FAIL = 5;
+    /** 管理员登录锁定时间（分钟） */
+    private static final int ADMIN_LOCK_MINUTES = 30;
+
     /**
-     * 管理员登录（含 IP 限流：60秒内最多 5 次）
+     * 管理员登录（IP 限流 + 账号级暴力破解防护）
      */
     @OperLog(module = "认证", operation = "管理员登录")
     @PostMapping("/login")
     public R<LoginResponse> login(@Valid @RequestBody LoginRequest request,
                                    HttpServletRequest httpRequest) {
         rateLimitIP(httpRequest, "admin-login", 20, 60);
+
+        // 账号级暴力破解防护（与 C 端用户一致）
+        String lockKey = "flashflow:auth:admin:login:fail:" + request.getAccount();
+        RAtomicLong failCount = redissonClient.getAtomicLong(lockKey);
+        if (failCount.get() >= ADMIN_MAX_LOGIN_FAIL) {
+            throw new BusinessException(ErrorCode.LOGIN_LOCKED,
+                    "账号已锁定" + ADMIN_LOCK_MINUTES + "分钟，请稍后再试");
+        }
+
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getAccount(), request.getPassword())
             );
 
             LoginUser loginUser = (LoginUser) authentication.getPrincipal();
+
+            // 登录成功，清除失败计数
+            failCount.delete();
 
             String accessToken = jwtTokenProvider.generateAccessToken(
                     loginUser.getId(), loginUser.getUsername(), loginUser.getRoleCode());
@@ -80,6 +97,9 @@ public class AuthController {
 
             return R.ok(response);
         } catch (BadCredentialsException e) {
+            // 登录失败：递增计数 + 设置过期
+            failCount.incrementAndGet();
+            failCount.expire(Duration.ofMinutes(ADMIN_LOCK_MINUTES));
             throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
     }
@@ -258,13 +278,12 @@ public class AuthController {
         rateLimitByKey(key, maxRequests, windowSeconds, "操作过于频繁，请" + windowSeconds + "秒后再试");
     }
 
-    /** 通用 Redis 计数器限流 */
+    /** 通用 Redis 计数器限流（原子 INCR + TTL 续期） */
     private void rateLimitByKey(String key, int maxRequests, int windowSeconds, String errorMsg) {
         RAtomicLong counter = redissonClient.getAtomicLong(key);
         long count = counter.incrementAndGet();
-        if (count == 1) {
-            counter.expire(Duration.ofSeconds(windowSeconds));
-        }
+        // 每次 INCR 都续期 TTL，防止首次设置失败导致计数器永不过期
+        counter.expire(Duration.ofSeconds(windowSeconds));
         if (count > maxRequests) {
             throw new BusinessException(ErrorCode.RATE_LIMITED, errorMsg);
         }

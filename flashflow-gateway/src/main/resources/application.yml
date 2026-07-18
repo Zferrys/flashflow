@@ -78,24 +78,29 @@ jwt:
 gateway:
   auth:
     white-list:
+      # ── 认证相关（无需登录）──
       - /api/flashflow/auth/login
       - /api/flashflow/auth/refresh
       - /api/flashflow/auth/user/register
       - /api/flashflow/auth/user/login
       - /api/flashflow/auth/user/send-code
       - /api/flashflow/auth/user/verify-code
+      # ── 外部回调（支付宝异步通知，无法带 JWT）──
       - /api/flashflow/payment/notify
-      # mock-pay 已从白名单移除，需认证后才能调用（生产环境应彻底关闭）
-      - /api/flashflow/promotion/flash/now
-      - /api/flashflow/promotion/activity/page
-      - /api/flashflow/promotion/product/spu
-      - /api/flashflow/promotion/product/sku
-      - /api/flashflow/promotion/coupon/available
+      # ── 公开浏览（GET 只读，无需登录）──
+      - GET:/api/flashflow/promotion/flash/now
+      - GET:/api/flashflow/promotion/activity/page
+      - GET:/api/flashflow/promotion/activity
+      - GET:/api/flashflow/promotion/product/spu/page
+      - GET:/api/flashflow/promotion/product/spu
+      - GET:/api/flashflow/promotion/product/sku
+      - GET:/api/flashflow/promotion/coupon/available
+      # ── 文档 & 监控 ──
       - /swagger-ui
       - /v3/api-docs
       - /doc.html
       - /webjars
-      - /actuator
+      - /actuator/health
       - /health
 
 spring.cloud.nacos.discovery:

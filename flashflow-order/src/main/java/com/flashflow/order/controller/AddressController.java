@@ -33,6 +33,8 @@ public class AddressController {
     @Operation(summary = "修改地址")
     @PutMapping
     public R<Void> update(@RequestBody DeliveryAddress address) {
+        // 从 Token 获取当前用户，防止请求体伪造 userId（IDOR 防护）
+        address.setUserId(UserContext.getUserId());
         addressService.update(address);
         return R.ok();
     }
@@ -40,6 +42,13 @@ public class AddressController {
     @Operation(summary = "删除地址")
     @DeleteMapping("/{id}")
     public R<Void> remove(@PathVariable Long id) {
+        // 先校验地址归属再删除（IDOR 防护）
+        List<DeliveryAddress> addresses = addressService.getUserAddresses(UserContext.getUserId());
+        boolean owned = addresses.stream().anyMatch(a -> a.getId().equals(id));
+        if (!owned) {
+            throw new com.flashflow.common.exception.BusinessException(
+                    com.flashflow.common.domain.ErrorCode.FORBIDDEN, "无权删除此地址");
+        }
         addressService.remove(id);
         return R.ok();
     }

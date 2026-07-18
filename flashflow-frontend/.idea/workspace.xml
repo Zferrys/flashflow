@@ -5,42 +5,34 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="937faea4-b586-4c8c-9d3a-03a44ef0b121" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/config/RestTemplateConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/config/RestTemplateConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.auth" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.auth" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.gateway" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.gateway" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.inventory" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.inventory" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.order" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.order" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.payment" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.payment" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.promotion" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.promotion" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/controller/AuthController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/controller/AuthController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/controller/SysUserController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/controller/SysUserController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/security/JwtTokenProvider.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/security/JwtTokenProvider.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/service/UserService.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/service/UserService.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/service/impl/MailServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/service/impl/MailServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/service/impl/UserServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/service/impl/UserServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-common/src/main/java/com/flashflow/common/config/RedissonConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-common/src/main/java/com/flashflow/common/config/RedissonConfig.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-common/src/main/java/com/flashflow/common/domain/R.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-common/src/main/java/com/flashflow/common/domain/R.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/api/upload.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/upload.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../flashflow-gateway/src/main/java/com/flashflow/gateway/config/SentinelConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-gateway/src/main/java/com/flashflow/gateway/config/SentinelConfig.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-gateway/src/main/java/com/flashflow/gateway/filter/AuthGlobalFilter.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-gateway/src/main/java/com/flashflow/gateway/filter/AuthGlobalFilter.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/config/RabbitInventoryConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/config/RabbitInventoryConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../flashflow-gateway/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-gateway/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/controller/InventoryController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/controller/InventoryController.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/mq/OrderEventConsumer.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/mq/OrderEventConsumer.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/service/impl/InventoryServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/service/impl/InventoryServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/config/RabbitMQJsonConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/config/RabbitMQJsonConfig.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/config/RabbitOrderConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/config/RabbitOrderConfig.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/config/RestTemplateConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/config/RestTemplateConfig.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/controller/OrderController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/controller/OrderController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/dao/OrderInfoMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/dao/OrderInfoMapper.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/dao/OrderItemMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/dao/OrderItemMapper.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/mq/PaymentEventConsumer.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/mq/PaymentEventConsumer.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/controller/AddressController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/controller/AddressController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/service/impl/AddressServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/service/impl/AddressServiceImpl.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/service/impl/OrderServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/service/impl/OrderServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/config/RabbitPaymentConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/config/RabbitPaymentConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/task/LocalTransactionScanner.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/task/LocalTransactionScanner.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/controller/PaymentController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/controller/PaymentController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/mq/PaymentEventPublisher.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/mq/PaymentEventPublisher.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/service/impl/PaymentServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/service/impl/PaymentServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/controller/ProductController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/controller/ProductController.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/controller/PromotionController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/controller/PromotionController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/dao/PromotionRecordMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/dao/PromotionRecordMapper.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/dao/PromotionSkuMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/dao/PromotionSkuMapper.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/Coupon.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/Coupon.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/service/PromotionService.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/service/PromotionService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/service/impl/CouponServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/service/impl/CouponServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/PromotionActivity.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/PromotionActivity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/PromotionSku.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/PromotionSku.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/scheduler/ActivityStatusScheduler.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/scheduler/ActivityStatusScheduler.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/service/impl/PromotionServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/service/impl/PromotionServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../sql/init-coupon.sql" beforeDir="false" afterPath="$PROJECT_DIR$/../sql/init-coupon.sql" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../sql/init-promotion.sql" beforeDir="false" afterPath="$PROJECT_DIR$/../sql/init-promotion.sql" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,26 +59,26 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "RunOnceActivity.OpenProjectViewOnStart": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "D:/javacode/Java/Pro/resume_pro/flashflow/flashflow-frontend",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "project.structure.last.edited": "Project",
-    "project.structure.proportion": "0.0",
-    "project.structure.side.proportion": "0.23793103",
-    "settings.editor.selected.configurable": "MavenSettings",
-    "ts.external.directory.path": "D:\\javacode\\Java\\Pro\\resume_pro\\flashflow\\flashflow-frontend\\node_modules\\typescript\\lib",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/javacode/Java/Pro/resume_pro/flashflow/flashflow-frontend&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.0&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.23793103&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;MavenSettings&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;D:\\javacode\\Java\\Pro\\resume_pro\\flashflow\\flashflow-frontend\\node_modules\\typescript\\lib&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RunManager">
     <configuration default="true" type="JetRunConfigurationType">
       <module name="flashflow-frontend" />
@@ -116,6 +108,7 @@
       <workItem from="1784292628124" duration="5689000" />
       <workItem from="1784302315214" duration="7000" />
       <workItem from="1784302386210" duration="8847000" />
+      <workItem from="1784340113521" duration="8438000" />
     </task>
     <servers />
   </component>

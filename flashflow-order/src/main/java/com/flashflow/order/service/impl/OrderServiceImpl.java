@@ -23,6 +23,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -44,6 +45,7 @@ public class OrderServiceImpl implements OrderService {
     private final RedissonClient redissonClient;
     private final OrderEventPublisher orderEventPublisher;
     private final RestTemplate restTemplate;
+    private final TransactionTemplate transactionTemplate;
 
     /** Redis 订单号自增 Key */
     private static final String ORDER_SN_KEY = "flashflow:order:sn:incr";
@@ -52,62 +54,55 @@ public class OrderServiceImpl implements OrderService {
     @org.springframework.beans.factory.annotation.Value("${promotion.service.url:http://127.0.0.1:8100/api/flashflow/promotion}")
     private String promotionBaseUrl;
 
+    /**
+     * 创建订单：HTTP 优惠券调用在事务外 → DB 操作在事务内
+     * 避免事务内持 DB 连接等 HTTP 响应，防止秒杀高峰期连接池耗尽
+     */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public OrderInfo createOrder(OrderInfo order, List<OrderItemDTO> items, Long userCouponId) {
-        // 生成订单号
+        // ── 阶段1：预计算（无事务，HTTP 调用在此完成）──
         String orderSn = generateOrderSn();
-        order.setOrderSn(orderSn);
-        order.setStatus(OrderStatus.PENDING.getCode());
-
-        // 计算商品总额
         BigDecimal total = items.stream()
                 .map(i -> i.price().multiply(BigDecimal.valueOf(i.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        order.setTotalAmount(total);
-
-        // 优惠券处理：HTTP 调用在事务前完成，避免事务内持 DB 连接等网络
-        // 核销操作的幂等性由 promotion 模块保证（乐观锁 UPDATE WHERE used=0）
         BigDecimal discountAmount = calculateAndMarkCoupon(userCouponId, total, orderSn);
+
+        order.setOrderSn(orderSn);
+        order.setStatus(OrderStatus.PENDING.getCode());
+        order.setTotalAmount(total);
         order.setDiscountAmount(discountAmount);
         order.setPayAmount(total.subtract(discountAmount));
 
-        // 保存订单
-        orderInfoMapper.insert(order);
+        // ── 阶段2：事务性 DB 操作（使用 TransactionTemplate 确保事务生效）──
+        return transactionTemplate.execute(status -> {
+            orderInfoMapper.insert(order);
 
-        // 保存订单项（批量 INSERT）
-        List<OrderItem> orderItems = new java.util.ArrayList<>();
-        for (OrderItemDTO item : items) {
-            OrderItem orderItem = new OrderItem();
-            orderItem.setOrderId(order.getId());
-            orderItem.setOrderSn(orderSn);
-            orderItem.setSkuId(item.skuId());
-            orderItem.setSkuName(item.skuName());
-            orderItem.setSkuImage(item.skuImage());
-            orderItem.setSkuPrice(item.price());
-            orderItem.setQuantity(item.quantity());
-            orderItem.setSubTotal(item.price().multiply(BigDecimal.valueOf(item.quantity())));
-            orderItems.add(orderItem);
-        }
-        if (!orderItems.isEmpty()) {
-            orderItemMapper.insertBatch(orderItems);
-        }
+            List<OrderItem> orderItems = new java.util.ArrayList<>();
+            for (OrderItemDTO item : items) {
+                OrderItem orderItem = new OrderItem();
+                orderItem.setOrderId(order.getId());
+                orderItem.setOrderSn(orderSn);
+                orderItem.setSkuId(item.skuId());
+                orderItem.setSkuName(item.skuName());
+                orderItem.setSkuImage(item.skuImage());
+                orderItem.setSkuPrice(item.price());
+                orderItem.setQuantity(item.quantity());
+                orderItem.setSubTotal(item.price().multiply(BigDecimal.valueOf(item.quantity())));
+                orderItems.add(orderItem);
+            }
+            if (!orderItems.isEmpty()) {
+                orderItemMapper.insertBatch(orderItems);
+            }
 
-        // 记录事件
-        recordEvent(order.getId(), orderSn, null, OrderStatus.PENDING, 0, 0L, null);
+            recordEvent(order.getId(), orderSn, null, OrderStatus.PENDING, 0, 0L, null);
+            orderEventPublisher.publishOrderCreated(orderSn, order.getUserId(), items, order.getPayAmount());
 
-        // 发布 MQ 事件（Saga: 通知库存模块扣减库存）
-        orderEventPublisher.publishOrderCreated(orderSn, order.getUserId(), items, order.getPayAmount());
-
-        log.info("订单创建成功: orderSn={}, total={}, discount={}, pay={}",
-                orderSn, total, discountAmount, order.getPayAmount());
-        return order;
+            log.info("订单创建成功: orderSn={}, total={}, discount={}, pay={}",
+                    orderSn, total, discountAmount, order.getPayAmount());
+            return order;
+        });
     }
 
-    /**
-     * 优惠券计算 + 核销（在事务外执行 HTTP 调用，避免长事务持 DB 连接）
-     * 核销失败降级不使用优惠券
-     */
     private BigDecimal calculateAndMarkCoupon(Long userCouponId, BigDecimal total, String orderSn) {
         if (userCouponId == null) return BigDecimal.ZERO;
         try {

@@ -129,7 +129,10 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String handleNotify(Map<String, String> notifyParams) {
-        log.info("收到支付宝回调: params={}", notifyParams);
+        // 脱敏日志：仅记录必要字段，不输出全量参数（含buyer_id等敏感信息）
+        String orderSn = notifyParams.get("out_trade_no");
+        String tradeNo = notifyParams.get("trade_no");
+        log.info("收到支付回调: orderSn={}, tradeNo={}", orderSn, tradeNo);
 
         // 1. 验签（防止伪造回调）
         if (alipayClient != null) {
@@ -137,17 +140,16 @@ public class PaymentServiceImpl implements PaymentService {
                 boolean signVerified = AlipaySignature.rsaCheckV1(
                         notifyParams, alipayPublicKey, "UTF-8", "RSA2");
                 if (!signVerified) {
-                    log.error("支付宝回调验签失败: {}", notifyParams);
+                    log.error("支付宝回调验签失败: orderSn={}", orderSn);
                     return "fail";
                 }
             } catch (AlipayApiException e) {
-                log.error("支付宝回调验签异常: ", e);
+                log.error("支付宝回调验签异常: orderSn={}", orderSn, e);
                 return "fail";
             }
         }
 
         // 2. 解析订单号
-        String orderSn = notifyParams.get("out_trade_no");
         if (orderSn == null) {
             log.error("回调缺少 out_trade_no");
             return "fail";
@@ -161,11 +163,10 @@ public class PaymentServiceImpl implements PaymentService {
         }
         if (payOrder.getNotifyStatus() == 1) {
             log.info("回调已处理，跳过: orderSn={}", orderSn);
-            return "success"; // 已处理，直接返回成功
+            return "success";
         }
 
         // 4. 更新支付状态
-        String tradeNo = notifyParams.get("trade_no");
         String totalAmount = notifyParams.get("total_amount");
         payOrder.setTradeNo(tradeNo);
         payOrder.setStatus(1);
@@ -179,9 +180,17 @@ public class PaymentServiceImpl implements PaymentService {
         paymentOrderMapper.updateById(payOrder);
         log.info("支付回调处理成功: orderSn={}, tradeNo={}", orderSn, tradeNo);
 
-        // 5. 通过 MQ 异步通知订单服务（替代同步 HTTP 调用）
-        paymentEventPublisher.publishPaymentSuccess(orderSn, tradeNo,
-                totalAmount != null ? new BigDecimal(totalAmount) : payOrder.getPayAmount());
+        // 5. 事务提交后异步通知订单服务（防止事务回滚但 MQ 已发送）
+        final String finalOrderSn = orderSn;
+        final String finalTradeNo = tradeNo;
+        final BigDecimal payAmount = totalAmount != null ? new BigDecimal(totalAmount) : payOrder.getPayAmount();
+        org.springframework.transaction.support.TransactionSynchronizationManager
+                .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                paymentEventPublisher.publishPaymentSuccess(finalOrderSn, finalTradeNo, payAmount);
+            }
+        });
 
         return "success";
     }

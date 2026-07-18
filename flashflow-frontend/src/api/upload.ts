@@ -8,8 +8,7 @@ import request from './request'
 export default async function uploadImage(file: File): Promise<string> {
   const formData = new FormData()
   formData.append('file', file)
-  const res = await request.post('/auth/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  // 不手动设 Content-Type，让 axios 自动带 boundary
+  const res = await request.post('/auth/upload', formData)
   return res.data
 }

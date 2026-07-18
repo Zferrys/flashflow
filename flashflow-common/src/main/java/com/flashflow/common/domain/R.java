@@ -17,9 +17,10 @@ public class R<T> {
     private int code;
     private String msg;
     private T data;
+    private boolean success;
 
     public static <T> R<T> ok(T data) {
-        return new R<>(ErrorCode.SUCCESS.getCode(), ErrorCode.SUCCESS.getMessage(), data);
+        return new R<>(ErrorCode.SUCCESS.getCode(), ErrorCode.SUCCESS.getMessage(), data, true);
     }
 
     public static <T> R<T> ok() {
@@ -27,15 +28,15 @@ public class R<T> {
     }
 
     public static <T> R<T> fail(ErrorCode errorCode) {
-        return new R<>(errorCode.getCode(), errorCode.getMessage(), null);
+        return new R<>(errorCode.getCode(), errorCode.getMessage(), null, false);
     }
 
     public static <T> R<T> fail(ErrorCode errorCode, String extraMsg) {
-        return new R<>(errorCode.getCode(), errorCode.getMessage() + "：" + extraMsg, null);
+        return new R<>(errorCode.getCode(), errorCode.getMessage() + "：" + extraMsg, null, false);
     }
 
     public static <T> R<T> fail(int code, String msg) {
-        return new R<>(code, msg, null);
+        return new R<>(code, msg, null, false);
     }
 
     public boolean isSuccess() {

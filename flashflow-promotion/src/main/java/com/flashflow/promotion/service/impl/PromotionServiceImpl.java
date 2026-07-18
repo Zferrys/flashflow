@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RAtomicLong;
 import org.redisson.api.RScript;
 import org.redisson.api.RedissonClient;
+import org.redisson.client.codec.StringCodec;
 import org.springframework.beans.factory.annotation.Value;
 import com.flashflow.common.util.ScriptUtil;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -90,19 +91,38 @@ public class PromotionServiceImpl implements PromotionService {
     @Override
     public void updateActivity(PromotionActivity activity) {
         activityMapper.updateById(activity);
+        // 修改活动后清缓存，防止读到旧数据
+        deleteActivityCache(activity.getId());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void publish(Long id) {
         PromotionActivity activity = getActivity(id);
-        // 草稿(0) 或 待预热(1) 都可以发布 → 重新根据时间计算状态 + 预热 Redis
-        if (activity.getStatus() != 0 && activity.getStatus() != 1) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "只有草稿或待预热状态才能发布");
+        if (activity.getStatus() != 0 && activity.getStatus() != 1 && activity.getStatus() != 2) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "只有草稿、待预热或进行中状态才能发布");
         }
+        // 1. 先删缓存（Cache-Aside 写策略：防止并发读拿到旧数据）
+        deleteActivityCache(id);
+        // 2. Redis 预热（创建全部 16 个分片 key）
         warmUpRedis(id);
+        // 3. 清理旧限购计数（避免 "还没买就超限购"）
+        clearBuyLimitKeys(id);
+        // 4. 更新 DB 状态
         refreshActivityStatus(activity);
+        // 5. 二次删缓存（双删策略，防止并发读写入旧数据）
+        deleteActivityCache(id);
         log.info("活动发布成功: id={}, 状态={}", id, activity.getStatus());
+    }
+
+    /** 删除活动的 Redis 缓存（Cache-Aside 写策略） */
+    private void deleteActivityCache(Long activityId) {
+        redissonClient.getBucket("flashflow:cache:activity:" + activityId).delete();
+        try {
+            redissonClient.getKeys().deleteByPattern("flashflow:cache:promotion_sku:" + activityId + ":*");
+        } catch (Exception e) {
+            log.warn("删除 SKU 缓存失败（非致命）: activityId={}", activityId, e);
+        }
     }
 
     /** 根据当前时间自动更新活动状态（定时任务 + publish 时调用） */
@@ -194,6 +214,8 @@ public class PromotionServiceImpl implements PromotionService {
     @Override
     public void updateSku(PromotionSku sku) {
         promotionSkuMapper.updateById(sku);
+        // 修改 SKU 后清缓存，确保秒杀读到最新限购/库存
+        deleteSkuCache(sku.getActivityId(), sku.getSkuId());
     }
 
     @Override
@@ -202,6 +224,13 @@ public class PromotionServiceImpl implements PromotionService {
                 new LambdaQueryWrapper<PromotionSku>()
                         .eq(PromotionSku::getActivityId, activityId)
                         .eq(PromotionSku::getSkuId, skuId));
+        // 删除 SKU 后清缓存
+        deleteSkuCache(activityId, skuId);
+    }
+
+    /** 删除单个 SKU 的 Redis 缓存 */
+    private void deleteSkuCache(Long activityId, Long skuId) {
+        redissonClient.getBucket("flashflow:cache:promotion_sku:" + activityId + ":" + skuId).delete();
     }
 
     @Override
@@ -220,6 +249,11 @@ public class PromotionServiceImpl implements PromotionService {
     }
 
     // ========== 秒杀核心逻辑 ==========
+
+    /** 原子扣减 + 限购检查的 Lua 脚本返回值 */
+    private static final long LUA_OK = 1;
+    private static final long LUA_STOCK_INSUFFICIENT = 0;
+    private static final long LUA_BUY_LIMIT_EXCEEDED = -1;
 
     @Override
     public FlashSaleResult flashSale(FlashSaleRequest request) {
@@ -245,37 +279,52 @@ public class PromotionServiceImpl implements PromotionService {
             return new FlashSaleResult(false, "活动商品不存在", null);
         }
 
-        // 3. 限购校验（使用 Lua 脚本原子检查）
-        if (!checkBuyLimitAtomic(request.activityId(), request.userId(), sku.getPerUserLimit())) {
-            return new FlashSaleResult(false, "超过限购数量", null);
+        // 3. 确保所有分片预热（创建全部 16 个 key，0 库存的设为 0）
+        int shardCount = 16;
+        ensureAllShardsWarmed(request.skuId(), sku.getStockLimit(), shardCount);
+
+        // 4. 原子扣减 + 限购（一个 Lua 脚本完成，无竞态）
+        int perUserLimit = sku.getPerUserLimit() != null ? sku.getPerUserLimit() : 0;
+        int preferredShard = (int) (request.userId() % shardCount);
+        int actualShard = -1;
+        boolean buyLimitExceeded = false;
+
+        for (int offset = 0; offset < shardCount; offset++) {
+            int idx = (preferredShard + offset) % shardCount;
+            long result = atomicDeductAndCheckLimit(
+                    request.skuId(), idx,
+                    request.activityId(), request.userId(),
+                    request.quantity(), perUserLimit);
+            if (result == LUA_OK) {
+                actualShard = idx;
+                break;
+            }
+            if (result == LUA_BUY_LIMIT_EXCEEDED) {
+                buyLimitExceeded = true;
+                break;  // 限购是按用户的，换分片也没用
+            }
+            // result == LUA_STOCK_INSUFFICIENT → 试下一个分片
         }
 
-        int shardIndex = (int) (request.userId() % 16);
-        boolean buyLimitSet = true;
-        String stockKey = "stock:" + request.skuId() + ":" + shardIndex;
-        try {
-            // 4. 库存扣减（RAtomicLong 原子操作，无 Kryo codec 问题）
-            RAtomicLong stock = redissonClient.getAtomicLong(stockKey);
-            if (!stock.isExists()) {
-                return new FlashSaleResult(false, "库存不足", null);
-            }
-            long afterStock = stock.addAndGet(-request.quantity());
-            if (afterStock < 0) {
-                stock.addAndGet(request.quantity()); // 回退
-                return new FlashSaleResult(false, "库存不足", null);
-            }
+        if (buyLimitExceeded) {
+            return new FlashSaleResult(false, "超过限购数量", null);
+        }
+        if (actualShard < 0) {
+            return new FlashSaleResult(false, "库存不足", null);
+        }
 
-            // 5. 记录参与流水（独立事务）
+        // 库存和限购在 Lua 脚本中已原子完成，无需额外 flag
+        try {
+            // 5. 记录参与流水
             insertPromotionRecord(request.activityId(), request.skuId(), request.userId(), request.quantity());
 
-            // 6. 创建订单（HTTP RPC 调用，在事务外执行）
+            // 6. 创建订单（HTTP RPC 调用）
             String orderSn = createOrderFromFlashSale(request, sku);
             if (orderSn == null) {
                 log.warn("秒杀订单创建失败，补偿释放: userId={}, skuId={}", request.userId(), request.skuId());
-                compensateRelease(request.skuId(), request.quantity(), shardIndex);
-                compensateDeleteRecord(request.activityId(), request.skuId(), request.userId());
+                compensateRelease(request.skuId(), request.quantity(), actualShard);
                 compensateReleaseBuyLimit(request.activityId(), request.userId());
-                buyLimitSet = false;
+                compensateDeleteRecord(request.activityId(), request.skuId(), request.userId());
                 return new FlashSaleResult(false, "订单创建失败", null);
             }
 
@@ -286,14 +335,74 @@ public class PromotionServiceImpl implements PromotionService {
             // 8. 递增 DB 已售数量（前端 SeckillDetail.vue 读取 soldCount/stockLimit 显示进度条）
             incrementSoldCount(request.skuId(), request.quantity());
 
-            log.info("秒杀成功: userId={}, skuId={}, orderSn={}", request.userId(), request.skuId(), orderSn);
+            log.info("秒杀成功: userId={}, skuId={}, orderSn={}, shard={}",
+                    request.userId(), request.skuId(), orderSn, actualShard);
             return new FlashSaleResult(true, "抢购成功", orderSn);
         } catch (Exception e) {
-            log.error("秒杀异常，补偿释放限购: userId={}, skuId={}", request.userId(), request.skuId(), e);
-            if (buyLimitSet) {
-                compensateReleaseBuyLimit(request.activityId(), request.userId());
-            }
+            log.error("秒杀异常，补偿释放: userId={}, skuId={}", request.userId(), request.skuId(), e);
+            compensateRelease(request.skuId(), request.quantity(), actualShard);
+            compensateReleaseBuyLimit(request.activityId(), request.userId());
+            compensateDeleteRecord(request.activityId(), request.skuId(), request.userId());
             throw e;
+        }
+    }
+
+    /**
+     * 原子 Lua 脚本：扣减库存 + 检查限购，一步完成，无竞态。
+     * <pre>
+     * KEYS[1] = stock:{skuId}:{shard}
+     * KEYS[2] = flashflow:promotion:buy_limit:{activityId}:{userId}
+     * ARGV[1] = quantity
+     * ARGV[2] = perUserLimit (0 = 不限购)
+     * ARGV[3] = stock TTL
+     * ARGV[4] = buyLimit TTL
+     * </pre>
+     * @return 1=成功, 0=库存不足, -1=超过限购
+     */
+    private long atomicDeductAndCheckLimit(Long skuId, int shard, Long activityId, Long userId,
+                                           int quantity, int perUserLimit) {
+        String stockKey = "stock:" + skuId + ":" + shard;
+        String buyLimitKey = "flashflow:promotion:buy_limit:" + activityId + ":" + userId;
+        try {
+            String script =
+                "local stock = redis.call('GET', KEYS[1])\n" +
+                "if stock == false then\n" +
+                "    return 0\n" +
+                "end\n" +
+                "stock = tonumber(stock)\n" +
+                "local qty = tonumber(ARGV[1])\n" +
+                "if stock < qty then\n" +
+                "    return 0\n" +
+                "end\n" +
+                "local limit = tonumber(ARGV[2])\n" +
+                "if limit > 0 then\n" +
+                "    local bought = redis.call('GET', KEYS[2])\n" +
+                "    if bought ~= false then\n" +
+                "        bought = tonumber(bought)\n" +
+                "        if bought >= limit then\n" +
+                "            return -1\n" +
+                "        end\n" +
+                "    end\n" +
+                "end\n" +
+                "redis.call('DECRBY', KEYS[1], qty)\n" +
+                "redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]))\n" +
+                "if limit > 0 then\n" +
+                "    if redis.call('EXISTS', KEYS[2]) == 1 then\n" +
+                "        redis.call('INCRBY', KEYS[2], qty)\n" +
+                "    else\n" +
+                "        redis.call('SET', KEYS[2], qty)\n" +
+                "        redis.call('EXPIRE', KEYS[2], tonumber(ARGV[4]))\n" +
+                "    end\n" +
+                "end\n" +
+                "return 1";
+            Long result = redissonClient.getScript(StringCodec.INSTANCE).eval(RScript.Mode.READ_WRITE,
+                    script, RScript.ReturnType.INTEGER,
+                    java.util.Arrays.asList(stockKey, buyLimitKey),
+                    String.valueOf(quantity), String.valueOf(perUserLimit), "86400", "7200");
+            return result != null ? result : LUA_STOCK_INSUFFICIENT;
+        } catch (Exception e) {
+            log.error("原子扣减+限购 Lua 异常: skuId={}, userId={}", skuId, userId, e);
+            return LUA_STOCK_INSUFFICIENT; // 异常时拒绝放行
         }
     }
 
@@ -382,43 +491,63 @@ public class PromotionServiceImpl implements PromotionService {
 
     // ========== 私有方法 ==========
 
-    /** Redis 预热：使用 RAtomicLong 存库存（与 flashSale 扣减一致，避免编码不兼容） */
-    private void warmUpRedis(Long activityId) {
-        List<PromotionSku> skuList = promotionSkuMapper.selectByActivityId(activityId);
-        for (PromotionSku sku : skuList) {
-            int perShard = sku.getStockLimit() / 16;
-            for (int i = 0; i < 16; i++) {
-                String key = "stock:" + sku.getSkuId() + ":" + i;
-                int shardStock = (i == 15) ? perShard + sku.getStockLimit() % 16 : perShard;
-                RAtomicLong stock = redissonClient.getAtomicLong(key);
-                stock.set(shardStock);
-                stock.expire(24, TimeUnit.HOURS);
+    /**
+     * 确保所有分片都已预热（创建全部 shardCount 个 key，库存为 0 的分片也设 0）。
+     * 兼容后台直接改状态未走 publish() 流程的场景——首次购买时自动从 DB 恢复到 Redis。
+     */
+    private void ensureAllShardsWarmed(Long skuId, Integer totalStock, int shardCount) {
+        if (totalStock == null || totalStock <= 0) return;
+        for (int i = 0; i < shardCount; i++) {
+            String key = "stock:" + skuId + ":" + i;
+            if (!redissonClient.getAtomicLong(key).isExists()) {
+                // 均匀分配：前 remainder 个分片多拿 1 个，避免大部分分片为 0
+                int shardStock = totalStock / shardCount + (i < totalStock % shardCount ? 1 : 0);
+                RAtomicLong rStock = redissonClient.getAtomicLong(key);
+                rStock.set(Math.max(shardStock, 0));
+                rStock.expire(24, TimeUnit.HOURS);
             }
-            log.info("预热完成: skuId={}, 总库存={}", sku.getSkuId(), sku.getStockLimit());
+        }
+        log.info("全部分片预热完成: skuId={}, totalStock={}", skuId, totalStock);
+    }
+
+    /** 清理发布活动时残留的旧限购计数 key */
+    private void clearBuyLimitKeys(Long activityId) {
+        try {
+            String pattern = "flashflow:promotion:buy_limit:" + activityId + ":*";
+            long deleted = redissonClient.getKeys().deleteByPattern(pattern);
+            if (deleted > 0) {
+                log.info("清理旧限购计数: activityId={}, 删除 {} 个 key", activityId, deleted);
+            }
+        } catch (Exception e) {
+            log.warn("清理旧限购计数失败（非致命）: activityId={}", activityId, e);
         }
     }
 
-    /**
-     * 用户限购检查（RAtomicLong 原子操作，兼容 Redisson 默认 Codec）
-     */
-    private boolean checkBuyLimitAtomic(Long activityId, Long userId, int limit) {
-        String key = "flashflow:promotion:buy_limit:" + activityId + ":" + userId;
-        try {
-            RAtomicLong counter = redissonClient.getAtomicLong(key);
-            long bought = counter.incrementAndGet();
-            if (bought == 1) {
-                counter.expire(java.time.Duration.ofHours(24));
+    /** Redis 预热：均匀分配库存到所有分片（始终创建全部 16 个 key，0 库存分片也设 0） */
+    private void warmUpRedis(Long activityId) {
+        List<PromotionSku> skuList = promotionSkuMapper.selectByActivityId(activityId);
+        for (PromotionSku sku : skuList) {
+            Integer total = sku.getStockLimit();
+            if (total == null || total <= 0) continue;
+            for (int i = 0; i < 16; i++) {
+                String key = "stock:" + sku.getSkuId() + ":" + i;
+                int shardStock = total / 16 + (i < total % 16 ? 1 : 0);
+                RAtomicLong stock = redissonClient.getAtomicLong(key);
+                stock.set(Math.max(shardStock, 0));
+                stock.expire(24, TimeUnit.HOURS);
             }
-            if (bought > limit) {
-                // 超限了，回退计数
-                counter.decrementAndGet();
-                return false;
-            }
-            return true;
-        } catch (Exception e) {
-            log.error("限购检查 Redis 异常，拒绝放行: ", e);
-            return false;
+            log.info("预热完成: skuId={}, 总库存={}, 分片分布: {}",
+                    sku.getSkuId(), total, describeShardDistribution(total));
         }
+    }
+
+    /** 描述分片库存分布（日志用），如 "10个分片各1件, 6个分片0件" */
+    private String describeShardDistribution(int total) {
+        int per = total / 16;
+        int rem = total % 16;
+        if (rem == 0 && per > 0) return "16×" + per;
+        if (per == 0 && rem > 0) return rem + "个分片各1件, " + (16 - rem) + "个分片0件";
+        return "前" + rem + "片" + (per + 1) + "件, 余" + (16 - rem) + "片" + per + "件";
     }
 
     /** 补偿释放 Redis 库存（订单创建失败时回调） */
@@ -447,11 +576,19 @@ public class PromotionServiceImpl implements PromotionService {
         }
     }
 
-    /** 补偿释放限购计数（订单创建失败时，允许用户再次抢购） */
+    /** 补偿释放限购计数（原子 Lua，防止计数器变为负数） */
     private void compensateReleaseBuyLimit(Long activityId, Long userId) {
         try {
             String key = "flashflow:promotion:buy_limit:" + activityId + ":" + userId;
-            redissonClient.getAtomicLong(key).decrementAndGet();
+            String script =
+                    "local bought = redis.call('GET', KEYS[1])\n" +
+                    "if bought ~= false and tonumber(bought) > 0 then\n" +
+                    "    redis.call('DECR', KEYS[1])\n" +
+                    "end\n" +
+                    "return 1";
+            redissonClient.getScript(StringCodec.INSTANCE).eval(RScript.Mode.READ_WRITE,
+                    script, RScript.ReturnType.INTEGER,
+                    java.util.Collections.singletonList(key));
             log.info("补偿释放限购计数: activityId={}, userId={}", activityId, userId);
         } catch (Exception e) {
             log.error("补偿释放限购计数失败! activityId={}, userId={}", activityId, userId, e);
