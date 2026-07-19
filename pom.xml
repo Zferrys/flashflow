@@ -41,7 +41,7 @@
         <sentinel.version>1.8.8</sentinel.version>
 
         <!-- 数据层 -->
-        <mybatis-plus.version>3.5.7</mybatis-plus.version>
+        <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <druid.version>1.2.24</druid.version>
         <mysql-connector.version>8.0.33</mysql-connector.version>
 
