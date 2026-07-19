@@ -33,6 +33,8 @@ logs/
 # Environment
 .env
 *.local.yml
+application-dev.yml
+*-dev.yml
 
 # Maven
 dependency-reduced-pom.xml
