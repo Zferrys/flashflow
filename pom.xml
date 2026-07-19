@@ -48,7 +48,7 @@
         <!-- 工具 -->
         <redisson.version>3.40.2</redisson.version>
         <knife4j.version>4.5.0</knife4j.version>
-        <hutool.version>5.8.34</hutool.version>
+        <hutool.version>5.8.47</hutool.version>
 
         <!-- 测试 -->
         <junit.version>5.11.4</junit.version>
