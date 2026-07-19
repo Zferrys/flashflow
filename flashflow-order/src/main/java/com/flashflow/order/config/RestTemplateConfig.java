@@ -1,23 +1,35 @@
 package com.flashflow.order.config;
 
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * RestTemplate 配置（用于订单创建时调用优惠券服务计算折扣+核销）
+ * RestTemplate 配置（用于订单创建时调用优惠券服务）
  *
- * 超时控制：优惠券服务不可达时降级不使用优惠券，不阻塞订单创建主流程。
+ * 使用 Apache HttpClient5 连接池，替代 SimpleClientHttpRequestFactory。
  */
 @Configuration
 public class RestTemplateConfig {
 
     @Bean
     public RestTemplate restTemplate() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(2000);   // 连接超时 2 秒
-        factory.setReadTimeout(5000);      // 读取超时 5 秒
+        PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
+        cm.setMaxTotal(100);
+        cm.setDefaultMaxPerRoute(30);
+
+        var httpClient = HttpClientBuilder.create()
+                .setConnectionManager(cm)
+                .build();
+
+        HttpComponentsClientHttpRequestFactory factory =
+                new HttpComponentsClientHttpRequestFactory(httpClient);
+        factory.setConnectTimeout(2000);
+        factory.setConnectionRequestTimeout(2000);
+
         return new RestTemplate(factory);
     }
 }
