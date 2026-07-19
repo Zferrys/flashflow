@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.flashflow.common.domain.ErrorCode;
 import com.flashflow.common.exception.BusinessException;
+import com.flashflow.promotion.config.OrderServiceBreaker;
 import com.flashflow.promotion.dao.PromotionActivityMapper;
 import com.flashflow.promotion.dao.PromotionRecordMapper;
 import com.flashflow.promotion.dao.PromotionSkuMapper;
@@ -16,10 +17,14 @@ import com.flashflow.promotion.entity.PromotionActivity;
 import com.flashflow.promotion.entity.PromotionRecord;
 import com.flashflow.promotion.entity.PromotionSku;
 import com.flashflow.promotion.service.PromotionService;
+import com.github.benmanes.caffeine.cache.Cache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RAtomicLong;
+import org.redisson.api.RRateLimiter;
 import org.redisson.api.RScript;
+import org.redisson.api.RateIntervalUnit;
+import org.redisson.api.RateType;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -54,12 +60,20 @@ public class PromotionServiceImpl implements PromotionService {
     private final StringRedisTemplate stringRedisTemplate;
     private final RedissonClient redissonClient;
     private final RestTemplate restTemplate;
+    private final OrderServiceBreaker orderBreaker;
+
+    // Caffeine 本地缓存（Redis 击穿保护）
+    private final Cache<Long, PromotionActivity> activityLocalCache;
+    private final Cache<String, PromotionSku> skuLocalCache;
 
     @Value("${order.service.url:http://127.0.0.1:5050/api/flashflow/order}")
     private String orderServiceUrl;
 
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule());
+
+    /** Redis 是否在线（击穿/熔断检测开关） */
+    private volatile boolean redisOnline = true;
 
     // ========== 活动管理 ==========
 
@@ -115,11 +129,13 @@ public class PromotionServiceImpl implements PromotionService {
         log.info("活动发布成功: id={}, 状态={}", id, activity.getStatus());
     }
 
-    /** 删除活动的 Redis 缓存（Cache-Aside 写策略） */
+    /** 删除活动的 Redis 缓存（Cache-Aside 写策略），同时清理本地缓存 */
     private void deleteActivityCache(Long activityId) {
         redissonClient.getBucket("flashflow:cache:activity:" + activityId).delete();
+        activityLocalCache.invalidate(activityId);
         try {
             redissonClient.getKeys().deleteByPattern("flashflow:cache:promotion_sku:" + activityId + ":*");
+            skuLocalCache.asMap().keySet().removeIf(k -> k.startsWith(activityId + ":"));
         } catch (Exception e) {
             log.warn("删除 SKU 缓存失败（非致命）: activityId={}", activityId, e);
         }
@@ -228,9 +244,10 @@ public class PromotionServiceImpl implements PromotionService {
         deleteSkuCache(activityId, skuId);
     }
 
-    /** 删除单个 SKU 的 Redis 缓存 */
+    /** 删除单个 SKU 的 Redis + 本地缓存 */
     private void deleteSkuCache(Long activityId, Long skuId) {
         redissonClient.getBucket("flashflow:cache:promotion_sku:" + activityId + ":" + skuId).delete();
+        skuLocalCache.invalidate(activityId + ":" + skuId);
     }
 
     @Override
@@ -255,15 +272,48 @@ public class PromotionServiceImpl implements PromotionService {
     private static final long LUA_STOCK_INSUFFICIENT = 0;
     private static final long LUA_BUY_LIMIT_EXCEEDED = -1;
 
+    /**
+     * 检测 Redis 是否在线（快速心跳，不阻塞请求）
+     * 避免 Redis 已宕机但客户端还在等待超时
+     */
+    private boolean isRedisAvailable() {
+        try {
+            return redissonClient.getKeys().count() >= 0;
+        } catch (Exception e) {
+            if (redisOnline) {
+                redisOnline = false;
+                log.error("Redis 连接异常，进入降级模式: {}", e.getMessage());
+            }
+            return false;
+        }
+    }
+
     @Override
     public FlashSaleResult flashSale(FlashSaleRequest request) {
+        // ===== Redis 击穿保护 =====
+        if (!isRedisAvailable()) {
+            log.warn("Redis 不可用，秒杀拒绝: userId={}", request.userId());
+            return new FlashSaleResult(false, "系统繁忙，请稍后重试", null);
+        }
+        // Redis 恢复后自动续联
+        redisOnline = true;
+
+        // ===== 限流：每用户 500ms 内最多 1 次 =====
+        String rateLimitKey = "flashflow:ratelimit:seckill:" + request.userId();
+        RRateLimiter limiter = redissonClient.getRateLimiter(rateLimitKey);
+        limiter.trySetRate(RateType.PER_CLIENT, 2, 1, RateIntervalUnit.SECONDS); // 每秒最多 2 次
+        limiter.expire(Duration.ofSeconds(10));
+        if (!limiter.tryAcquire(1)) {
+            return new FlashSaleResult(false, "操作过于频繁，请稍后重试", null);
+        }
+
         // 0. 幂等检查（防止用户重复提交同一请求）
         String idempotentKey = "flashflow:seckill:idempotent:" + request.activityId() + ":" + request.userId();
-        if (!redissonClient.getBucket(idempotentKey).setIfAbsent("1", java.time.Duration.ofSeconds(10))) {
+        if (!redissonClient.getBucket(idempotentKey).setIfAbsent("1", Duration.ofSeconds(10))) {
             return new FlashSaleResult(false, "请勿重复提交", null);
         }
 
-        // 1. 校验活动（优先从 Redis 缓存读取，减少 DB 压力）
+        // 1. 校验活动（两级缓存：本地 → Redis → DB）
         PromotionActivity activity = getActivityFromCache(request.activityId());
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(activity.getStartTime())) {
@@ -273,17 +323,17 @@ public class PromotionServiceImpl implements PromotionService {
             return new FlashSaleResult(false, "活动已结束", null);
         }
 
-        // 2. 校验活动商品（优先从 Redis 缓存读取）
+        // 2. 校验活动商品（两级缓存）
         PromotionSku sku = getSkuFromCache(request.activityId(), request.skuId());
         if (sku == null) {
             return new FlashSaleResult(false, "活动商品不存在", null);
         }
 
-        // 3. 确保所有分片预热（创建全部 16 个 key，0 库存的设为 0）
+        // 3. 确保所有分片预热
         int shardCount = 16;
         ensureAllShardsWarmed(request.skuId(), sku.getStockLimit(), shardCount);
 
-        // 4. 原子扣减 + 限购（一个 Lua 脚本完成，无竞态）
+        // 4. 原子扣减 + 限购
         int perUserLimit = sku.getPerUserLimit() != null ? sku.getPerUserLimit() : 0;
         int preferredShard = (int) (request.userId() % shardCount);
         int actualShard = -1;
@@ -301,9 +351,8 @@ public class PromotionServiceImpl implements PromotionService {
             }
             if (result == LUA_BUY_LIMIT_EXCEEDED) {
                 buyLimitExceeded = true;
-                break;  // 限购是按用户的，换分片也没用
+                break;
             }
-            // result == LUA_STOCK_INSUFFICIENT → 试下一个分片
         }
 
         if (buyLimitExceeded) {
@@ -313,13 +362,12 @@ public class PromotionServiceImpl implements PromotionService {
             return new FlashSaleResult(false, "库存不足", null);
         }
 
-        // 库存和限购在 Lua 脚本中已原子完成，无需额外 flag
         try {
             // 5. 记录参与流水
             insertPromotionRecord(request.activityId(), request.skuId(), request.userId(), request.quantity());
 
-            // 6. 创建订单（HTTP RPC 调用）
-            String orderSn = createOrderFromFlashSale(request, sku);
+            // 6. 创建订单（HTTP RPC 调用，带熔断保护）
+            String orderSn = createOrderWithBreaker(request, sku);
             if (orderSn == null) {
                 log.warn("秒杀订单创建失败，补偿释放: userId={}, skuId={}", request.userId(), request.skuId());
                 compensateRelease(request.skuId(), request.quantity(), actualShard);
@@ -330,9 +378,9 @@ public class PromotionServiceImpl implements PromotionService {
 
             // 7. 设置幂等标记，阻止 MQ 消费者端 InventoryService.deduct() 重复扣减
             String mqIdempotentKey = "flashflow:idempotent:deduct:" + orderSn + ":" + request.skuId();
-            redissonClient.getBucket(mqIdempotentKey).set("1", java.time.Duration.ofSeconds(300));
+            redissonClient.getBucket(mqIdempotentKey).set("1", Duration.ofSeconds(300));
 
-            // 8. 递增 DB 已售数量（前端 SeckillDetail.vue 读取 soldCount/stockLimit 显示进度条）
+            // 8. 递增 DB 已售数量
             incrementSoldCount(request.skuId(), request.quantity());
 
             log.info("秒杀成功: userId={}, skuId={}, orderSn={}, shard={}",
@@ -348,17 +396,30 @@ public class PromotionServiceImpl implements PromotionService {
     }
 
     /**
-     * 原子 Lua 脚本：扣减库存 + 检查限购，一步完成，无竞态。
-     * <pre>
-     * KEYS[1] = stock:{skuId}:{shard}
-     * KEYS[2] = flashflow:promotion:buy_limit:{activityId}:{userId}
-     * ARGV[1] = quantity
-     * ARGV[2] = perUserLimit (0 = 不限购)
-     * ARGV[3] = stock TTL
-     * ARGV[4] = buyLimit TTL
-     * </pre>
-     * @return 1=成功, 0=库存不足, -1=超过限购
+     * 创建订单（带熔断保护）
+     * 如果 Order 服务挂了或响应慢，熔断器打开后快速失败，不阻塞线程
      */
+    private String createOrderWithBreaker(FlashSaleRequest request, PromotionSku sku) {
+        if (!orderBreaker.tryAcquire()) {
+            log.warn("Order 服务熔断中，快速拒绝: userId={}", request.userId());
+            return null;
+        }
+        try {
+            String orderSn = createOrderFromFlashSale(request, sku);
+            if (orderSn != null) {
+                orderBreaker.onSuccess();
+            } else {
+                orderBreaker.onFailure();
+            }
+            return orderSn;
+        } catch (Exception e) {
+            orderBreaker.onFailure();
+            throw e;
+        }
+    }
+
+    // ========== Lua 脚本 ==========
+
     private long atomicDeductAndCheckLimit(Long skuId, int shard, Long activityId, Long userId,
                                            int quantity, int perUserLimit) {
         String stockKey = "stock:" + skuId + ":" + shard;
@@ -402,14 +463,13 @@ public class PromotionServiceImpl implements PromotionService {
             return result != null ? result : LUA_STOCK_INSUFFICIENT;
         } catch (Exception e) {
             log.error("原子扣减+限购 Lua 异常: skuId={}, userId={}", skuId, userId, e);
-            return LUA_STOCK_INSUFFICIENT; // 异常时拒绝放行
+            return LUA_STOCK_INSUFFICIENT;
         }
     }
 
-    /** 原子递增活动商品的已售数量（前端进度条读取 soldCount/stockLimit） */
+    /** 原子递增活动商品的已售数量 */
     private void incrementSoldCount(Long skuId, int delta) {
         try {
-            // 找到该 skuId 在 promotion_sku 中的 id（需要 activity 上下文，取最近一条）
             PromotionSku sku = promotionSkuMapper.selectOne(
                     new LambdaQueryWrapper<PromotionSku>()
                             .eq(PromotionSku::getSkuId, skuId)
@@ -423,7 +483,7 @@ public class PromotionServiceImpl implements PromotionService {
         }
     }
 
-    /** 记录参与流水（单 SQL 原子操作，不需要事务） */
+    /** 记录参与流水 */
     private void insertPromotionRecord(Long activityId, Long skuId, Long userId, int quantity) {
         PromotionRecord record = new PromotionRecord();
         record.setActivityId(activityId);
@@ -433,7 +493,7 @@ public class PromotionServiceImpl implements PromotionService {
         promotionRecordMapper.insert(record);
     }
 
-    /** 补偿删除参与记录（订单创建失败时回滚，单 SQL 原子操作） */
+    /** 补偿删除参与记录 */
     private void compensateDeleteRecord(Long activityId, Long skuId, Long userId) {
         try {
             promotionRecordMapper.delete(new LambdaQueryWrapper<PromotionRecord>()
@@ -445,9 +505,7 @@ public class PromotionServiceImpl implements PromotionService {
         }
     }
 
-    /**
-     * 秒杀成功后调用订单服务创建订单
-     */
+    /** 秒杀成功后调用订单服务创建订单 */
     private String createOrderFromFlashSale(FlashSaleRequest request, PromotionSku sku) {
         try {
             Map<String, Object> orderRequest = new java.util.HashMap<>();
@@ -489,18 +547,13 @@ public class PromotionServiceImpl implements PromotionService {
         return null;
     }
 
-    // ========== 私有方法 ==========
+    // ========== 预热 & 补偿 ==========
 
-    /**
-     * 确保所有分片都已预热（创建全部 shardCount 个 key，库存为 0 的分片也设 0）。
-     * 兼容后台直接改状态未走 publish() 流程的场景——首次购买时自动从 DB 恢复到 Redis。
-     */
     private void ensureAllShardsWarmed(Long skuId, Integer totalStock, int shardCount) {
         if (totalStock == null || totalStock <= 0) return;
         for (int i = 0; i < shardCount; i++) {
             String key = "stock:" + skuId + ":" + i;
             if (!redissonClient.getAtomicLong(key).isExists()) {
-                // 均匀分配：前 remainder 个分片多拿 1 个，避免大部分分片为 0
                 int shardStock = totalStock / shardCount + (i < totalStock % shardCount ? 1 : 0);
                 RAtomicLong rStock = redissonClient.getAtomicLong(key);
                 rStock.set(Math.max(shardStock, 0));
@@ -510,7 +563,6 @@ public class PromotionServiceImpl implements PromotionService {
         log.info("全部分片预热完成: skuId={}, totalStock={}", skuId, totalStock);
     }
 
-    /** 清理发布活动时残留的旧限购计数 key */
     private void clearBuyLimitKeys(Long activityId) {
         try {
             String pattern = "flashflow:promotion:buy_limit:" + activityId + ":*";
@@ -523,7 +575,6 @@ public class PromotionServiceImpl implements PromotionService {
         }
     }
 
-    /** Redis 预热：均匀分配库存到所有分片（始终创建全部 16 个 key，0 库存分片也设 0） */
     private void warmUpRedis(Long activityId) {
         List<PromotionSku> skuList = promotionSkuMapper.selectByActivityId(activityId);
         for (PromotionSku sku : skuList) {
@@ -541,7 +592,6 @@ public class PromotionServiceImpl implements PromotionService {
         }
     }
 
-    /** 描述分片库存分布（日志用），如 "10个分片各1件, 6个分片0件" */
     private String describeShardDistribution(int total) {
         int per = total / 16;
         int rem = total % 16;
@@ -550,7 +600,6 @@ public class PromotionServiceImpl implements PromotionService {
         return "前" + rem + "片" + (per + 1) + "件, 余" + (16 - rem) + "片" + per + "件";
     }
 
-    /** 补偿释放 Redis 库存（订单创建失败时回调） */
     private void compensateRelease(Long skuId, int quantity, int shardIndex) {
         try {
             String stockKey = "stock:" + skuId + ":" + shardIndex;
@@ -566,17 +615,13 @@ public class PromotionServiceImpl implements PromotionService {
     public void releaseBuyLimit(Long userId, Long skuId) {
         List<PromotionRecord> records = promotionRecordMapper.selectByUserAndSku(userId, skuId);
         for (PromotionRecord record : records) {
-            // 1. 释放 Redis 限购计数器
             compensateReleaseBuyLimit(record.getActivityId(), userId);
-            // 2. 删除参与记录（允许重新参与）
             promotionRecordMapper.deleteById(record.getId());
-            // 3. 回退已售数量（订单取消/退款时库存回滚）
             incrementSoldCount(skuId, -record.getQuantity());
             log.info("秒杀限购已释放: userId={}, skuId={}, activityId={}", userId, skuId, record.getActivityId());
         }
     }
 
-    /** 补偿释放限购计数（原子 Lua，防止计数器变为负数） */
     private void compensateReleaseBuyLimit(Long activityId, Long userId) {
         try {
             String key = "flashflow:promotion:buy_limit:" + activityId + ":" + userId;
@@ -588,56 +633,88 @@ public class PromotionServiceImpl implements PromotionService {
                     "return 1";
             redissonClient.getScript(StringCodec.INSTANCE).eval(RScript.Mode.READ_WRITE,
                     script, RScript.ReturnType.INTEGER,
-                    java.util.Collections.singletonList(key));
+                    Collections.singletonList(key));
             log.info("补偿释放限购计数: activityId={}, userId={}", activityId, userId);
         } catch (Exception e) {
             log.error("补偿释放限购计数失败! activityId={}, userId={}", activityId, userId, e);
         }
     }
 
-    // ========== Redis 缓存（秒杀热点数据，避免 DB 穿透）==========
+    // ========== 两级缓存：Caffeine（本地）→ Redis → DB ==========
 
-    /** 从 Redis 缓存获取活动信息（miss 时回源 DB 并回填缓存，TTL=5分钟） */
+    /**
+     * 从两级缓存获取活动信息。
+     * 顺序：Caffeine 本地缓存 → Redis → DB
+     * 目的：Redis 挂了不会击穿到 DB，本地缓存扛住读流量
+     */
     private PromotionActivity getActivityFromCache(Long activityId) {
+        // 1. 本地缓存
+        PromotionActivity local = activityLocalCache.getIfPresent(activityId);
+        if (local != null) return local;
+
+        // 2. Redis 缓存
         String cacheKey = "flashflow:cache:activity:" + activityId;
         try {
             String json = (String) redissonClient.getBucket(cacheKey).get();
             if (json != null) {
-                return objectMapper.readValue(json, PromotionActivity.class);
+                PromotionActivity activity = objectMapper.readValue(json, PromotionActivity.class);
+                activityLocalCache.put(activityId, activity); // 同时写本地
+                return activity;
             }
         } catch (Exception e) {
-            log.warn("活动缓存读取失败，回源DB: activityId={}", activityId, e);
+            log.warn("活动 Redis 缓存读失败，走本地/DB: activityId={}", activityId, e);
         }
+
+        // 3. DB 回源
         PromotionActivity activity = getActivity(activityId);
+
+        // 回填两级缓存
         try {
-            redissonClient.getBucket(cacheKey).set(objectMapper.writeValueAsString(activity), 300, java.util.concurrent.TimeUnit.SECONDS);
+            redissonClient.getBucket(cacheKey).set(objectMapper.writeValueAsString(activity), 300, TimeUnit.SECONDS);
         } catch (Exception e) {
-            log.warn("活动缓存回填失败: activityId={}", activityId, e);
+            log.warn("活动 Redis 缓存回填失败: activityId={}", activityId, e);
         }
+        activityLocalCache.put(activityId, activity);
         return activity;
     }
 
-    /** 从 Redis 缓存获取活动商品信息（miss 时回源 DB） */
+    /**
+     * 从两级缓存获取 SKU 信息。
+     * 顺序：Caffeine 本地缓存 → Redis → DB
+     */
     private PromotionSku getSkuFromCache(Long activityId, Long skuId) {
+        String localKey = activityId + ":" + skuId;
+
+        // 1. 本地缓存
+        PromotionSku local = skuLocalCache.getIfPresent(localKey);
+        if (local != null) return local;
+
+        // 2. Redis 缓存
         String cacheKey = "flashflow:cache:promotion_sku:" + activityId + ":" + skuId;
         try {
             String json = (String) redissonClient.getBucket(cacheKey).get();
             if (json != null) {
-                return objectMapper.readValue(json, PromotionSku.class);
+                PromotionSku sku = objectMapper.readValue(json, PromotionSku.class);
+                skuLocalCache.put(localKey, sku);
+                return sku;
             }
         } catch (Exception e) {
-            log.warn("活动商品缓存读取失败，回源DB: activityId={}, skuId={}", activityId, skuId, e);
+            log.warn("SKU Redis 缓存读失败，走本地/DB: activityId={}, skuId={}", activityId, skuId, e);
         }
+
+        // 3. DB 回源
         PromotionSku sku = promotionSkuMapper.selectOne(
                 new LambdaQueryWrapper<PromotionSku>()
                         .eq(PromotionSku::getActivityId, activityId)
                         .eq(PromotionSku::getSkuId, skuId));
         if (sku != null) {
+            // 回填两级缓存
             try {
-                redissonClient.getBucket(cacheKey).set(objectMapper.writeValueAsString(sku), 300, java.util.concurrent.TimeUnit.SECONDS);
+                redissonClient.getBucket(cacheKey).set(objectMapper.writeValueAsString(sku), 300, TimeUnit.SECONDS);
             } catch (Exception e) {
-                log.warn("活动商品缓存回填失败: activityId={}, skuId={}", activityId, skuId, e);
+                log.warn("SKU Redis 缓存回填失败: activityId={}, skuId={}", activityId, skuId, e);
             }
+            skuLocalCache.put(localKey, sku);
         }
         return sku;
     }

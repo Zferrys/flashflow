@@ -5,34 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="937faea4-b586-4c8c-9d3a-03a44ef0b121" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.auth" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.auth" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.gateway" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.gateway" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.inventory" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.inventory" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.order" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.order" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.payment" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.payment" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../deploy/docker/Dockerfile.promotion" beforeDir="false" afterPath="$PROJECT_DIR$/../deploy/docker/Dockerfile.promotion" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/controller/AuthController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/controller/AuthController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/service/impl/MailServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-auth/src/main/java/com/flashflow/auth/service/impl/MailServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-common/src/main/java/com/flashflow/common/domain/R.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-common/src/main/java/com/flashflow/common/domain/R.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/upload.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/upload.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-gateway/src/main/java/com/flashflow/gateway/config/SentinelConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-gateway/src/main/java/com/flashflow/gateway/config/SentinelConfig.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-gateway/src/main/java/com/flashflow/gateway/filter/AuthGlobalFilter.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-gateway/src/main/java/com/flashflow/gateway/filter/AuthGlobalFilter.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-gateway/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-gateway/src/main/resources/application.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/controller/InventoryController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/controller/InventoryController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/mq/OrderEventConsumer.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/mq/OrderEventConsumer.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/service/impl/InventoryServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-inventory/src/main/java/com/flashflow/inventory/service/impl/InventoryServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/controller/AddressController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/controller/AddressController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/service/impl/AddressServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/service/impl/AddressServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/service/impl/OrderServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/service/impl/OrderServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/task/LocalTransactionScanner.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-order/src/main/java/com/flashflow/order/task/LocalTransactionScanner.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/controller/PaymentController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/controller/PaymentController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/service/impl/PaymentServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-payment/src/main/java/com/flashflow/payment/service/impl/PaymentServiceImpl.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/controller/PromotionController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/controller/PromotionController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/PromotionActivity.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/PromotionActivity.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/PromotionSku.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/entity/PromotionSku.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/scheduler/ActivityStatusScheduler.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/scheduler/ActivityStatusScheduler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/service/impl/PromotionServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/../flashflow-promotion/src/main/java/com/flashflow/promotion/service/impl/PromotionServiceImpl.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -109,6 +82,7 @@
       <workItem from="1784302315214" duration="7000" />
       <workItem from="1784302386210" duration="8847000" />
       <workItem from="1784340113521" duration="8438000" />
+      <workItem from="1784452504064" duration="1226000" />
     </task>
     <servers />
   </component>

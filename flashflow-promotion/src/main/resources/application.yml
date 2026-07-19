@@ -27,6 +27,11 @@ spring:
     redis:
       host: 127.0.0.1
       port: 6379
+      timeout: 3000
+      # 生产环境 Redis Sentinel 配置（启用后自动替换单机配置）
+      # sentinel:
+      #   master: mymaster
+      #   nodes: 192.168.1.10:26379,192.168.1.11:26379,192.168.1.12:26379
 
   rabbitmq:
     host: 127.0.0.1
