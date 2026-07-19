@@ -53,7 +53,7 @@
         <!-- 测试 -->
         <junit.version>5.11.4</junit.version>
         <mockito.version>5.14.2</mockito.version>
-        <jacoco.version>0.8.12</jacoco.version>
+        <jacoco.version>0.8.15</jacoco.version>
 
         <!-- 插件 -->
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
