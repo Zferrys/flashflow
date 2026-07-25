@@ -148,14 +148,6 @@ mvn test -pl flashflow-inventory -Dtest=InventoryConcurrentTest
 | RestTemplate 连接池优化 | QPS 8.7 → 1661（×191） |
 | 超卖次数 | 0 |
 
-## 演示账号
-
-> 密码均为初始化脚本中的默认值，生产环境请务必修改。
-
-| 角色 | 账号 |
-|------|------|
-| 管理员 | admin |
-| C 端用户 | 13800138001 |
 
 ## 许可证
 
