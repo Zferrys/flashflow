@@ -147,9 +147,9 @@ CREATE TABLE IF NOT EXISTS email_verify (
   KEY `idx_email_type` (`email`,`type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱验证码';
 
--- 初始化管理员账号
+-- 默认管理员账号: admin / password（生产环境请立即修改密码）
 INSERT INTO sys_user (username, password, real_name, status) VALUES
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '系统管理员', 1);
+('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', 1);
 
 -- 初始化角色
 INSERT INTO sys_role (name, code, remark) VALUES

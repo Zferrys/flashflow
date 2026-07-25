@@ -30,13 +30,17 @@ class AuthApplicationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    /** 测试用管理员密码，默认与 init-auth.sql 中的 demo hash 匹配 */
+    @org.springframework.beans.factory.annotation.Value("${test.admin.password:password}")
+    private String adminPassword;
+
     @Test
     @Order(1)
     @DisplayName("管理员登录应该返回 Token")
     void adminLoginShouldReturnToken() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "account", "admin",
-                "password", "Admin@123"
+                "password", adminPassword
         ));
 
         mockMvc.perform(post("/api/flashflow/auth/login")
@@ -90,7 +94,7 @@ class AuthApplicationTest {
     void unknownUserShouldFail() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
                 "account", "nonexist",
-                "password", "Admin@123"
+                "password", adminPassword
         ));
 
         mockMvc.perform(post("/api/flashflow/auth/login")

@@ -15,7 +15,7 @@ spring:
         - id: flashflow-auth
           uri: lb://flashflow-auth
           predicates:
-            - Path=/api/flashflow/auth/**
+            - Path=/api/flashflow/auth/**,/api/flashflow/ai/**
 
         # Promotion 服务
         - id: flashflow-promotion
@@ -85,6 +85,8 @@ gateway:
       - /api/flashflow/auth/user/login
       - /api/flashflow/auth/user/send-code
       - /api/flashflow/auth/user/verify-code
+      # ── AI 助手（无需登录）──
+      - /api/flashflow/ai/**
       # ── 外部回调（支付宝异步通知，无法带 JWT）──
       - /api/flashflow/payment/notify
       # ── 公开浏览（GET 只读，无需登录）──

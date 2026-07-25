@@ -3,7 +3,7 @@
 -- ========================================
 -- 使用方式:
 --   方式1: source D:/javacode/Java/Pro/resume_pro/flashflow/sql/init-demo-data.sql
---   方式2: mysql -uroot -pzph < D:/javacode/Java/Pro/resume_pro/flashflow/sql/init-demo-data.sql
+--   方式2: mysql -u root -p < sql/zz-init-demo-data.sql
 -- ========================================
 -- 导入后需执行 Redis 预热:
 --   方法1 (API): POST /api/flashflow/promotion/activity/{id}/publish

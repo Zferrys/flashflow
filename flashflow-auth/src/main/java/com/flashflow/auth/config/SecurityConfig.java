@@ -34,6 +34,7 @@ public class SecurityConfig {
             "/api/flashflow/auth/user/login",
             "/api/flashflow/auth/user/send-code",
             "/api/flashflow/auth/user/verify-code",
+            "/api/flashflow/ai/**",
             "/swagger-ui/**",
             "/v3/api-docs/**",
             "/doc.html",
