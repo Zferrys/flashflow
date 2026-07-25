@@ -38,7 +38,7 @@
 
         <!-- 中间件客户端 -->
         <nacos-client.version>2.4.3</nacos-client.version>
-        <sentinel.version>1.8.8</sentinel.version>
+        <sentinel.version>1.8.10</sentinel.version>
 
         <!-- 数据层 -->
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
