@@ -46,7 +46,7 @@
         <mysql-connector.version>8.0.33</mysql-connector.version>
 
         <!-- 工具 -->
-        <redisson.version>3.40.2</redisson.version>
+        <redisson.version>4.6.1</redisson.version>
         <knife4j.version>4.5.0</knife4j.version>
         <hutool.version>5.8.34</hutool.version>
 
