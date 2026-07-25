@@ -70,5 +70,23 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
+        <!-- LangChain4j 核心 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>1.18.0</version>
+        </dependency>
+        <!-- LangChain4j OpenAI 兼容客户端（接入 DeepSeek） -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>1.18.0</version>
+        </dependency>
+        <!-- LangChain4j 本地中文 Embedding 模型（RAG 向量检索） -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-embeddings-bge-small-zh-v15</artifactId>
+            <version>1.18.0-beta28</version>
+        </dependency>
     </dependencies>
 </project>
