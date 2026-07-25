@@ -34,7 +34,7 @@
         <!-- Spring 生态版本 -->
         <spring-boot.version>3.2.12</spring-boot.version>
         <spring-cloud.version>2023.0.4</spring-cloud.version>
-        <spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
+        <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
 
         <!-- 中间件客户端 -->
         <nacos-client.version>2.4.3</nacos-client.version>
